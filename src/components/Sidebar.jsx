@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { NavLink } from 'react-router-dom';
 import { 
   LayoutDashboard, 
   Package, 
@@ -13,7 +14,7 @@ import {
   ChevronRight
 } from 'lucide-react';
 
-const Sidebar = ({ activeTab, setActiveTab, badges }) => {
+const Sidebar = ({ activeTab, badges }) => {
   const [expanded, setExpanded] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const profileRef = useRef(null);
@@ -72,12 +73,13 @@ const Sidebar = ({ activeTab, setActiveTab, badges }) => {
       <nav className="flex flex-col gap-2 px-3 flex-1">
         {navItems.map((item) => {
           const Icon = item.icon;
+          // We check the activeTab passed down from the App's URL logic
           const isActive = activeTab === item.id;
           
           return (
-            <button
+            <NavLink
               key={item.id}
-              onClick={() => setActiveTab(item.id)}
+              to={`/${item.id}`}
               className={`flex items-center p-3 rounded-xl transition-all duration-200 group relative ${
                 expanded ? 'justify-start px-4' : 'justify-center'
               } ${
@@ -120,7 +122,7 @@ const Sidebar = ({ activeTab, setActiveTab, badges }) => {
                   {item.label}
                 </div>
               )}
-            </button>
+            </NavLink>
           );
         })}
       </nav>
