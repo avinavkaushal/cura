@@ -32,7 +32,7 @@ const ApprovalQueue = () => {
       <div className="text-center mb-8">
         <h2 className="text-2xl font-bold">Manager Approval Queue</h2>
         <p className="text-cura-grey text-sm">
-          Quotes negotiated by the Procurement Agent[cite: 173].
+          Quotes negotiated by the Agent
         </p>
       </div>
 

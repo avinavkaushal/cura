@@ -4,14 +4,20 @@ import Dashboard from './components/Dashboard';
 import Inventory from './components/Inventory';
 import Ledger from './components/Ledger';
 import ApprovalQueue from './components/ApprovalQueue';
+import Automations from './components/Automations';
 
 function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
+  
+  const [badges] = useState({
+    approvals: 2,
+    inventory: 0
+  });
 
   return (
     <div className="flex min-h-screen bg-gray-50 font-jost text-cura-dark">
       {/* Sidebar */}
-      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
+      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} badges={badges} />
 
       {/* Main Content Area */}
       <main className="flex-1 p-8 overflow-y-auto">
@@ -26,6 +32,7 @@ function App() {
         {activeTab === 'inventory' && <Inventory />}
         {activeTab === 'ledger' && <Ledger />}
         {activeTab === 'approvals' && <ApprovalQueue />}
+        {activeTab === 'automations' && <Automations />}
       </main>
     </div>
   );

@@ -28,7 +28,7 @@ const Ledger = () => {
           <h2 className="text-4xl font-bold mt-2">₹1,85,200</h2>
           <div className="mt-6 pt-6 border-t border-gray-700">
             <button className="w-full bg-white text-cura-dark py-3 rounded-xl font-bold text-sm">
-              Generate 80G Report [cite: 171]
+              Generate Report
             </button>
           </div>
         </div>

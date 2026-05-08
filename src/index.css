@@ -1,6 +1,6 @@
 @import "tailwindcss";
 
-/* ── Cura Design Tokens (TailwindCSS v4 @theme) ── */
+
 @theme {
   --color-cura-blue: #17439B;
   --color-cura-grey: #83868E;
@@ -9,7 +9,7 @@
   --font-jost: "Jost", sans-serif;
 }
 
-/* ── Base Reset ── */
+
 body {
   margin: 0;
   font-family: "Jost", sans-serif;

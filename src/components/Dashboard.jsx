@@ -144,7 +144,7 @@ const Dashboard = () => {
             <div className="space-y-4">
               <div className="p-4 bg-gray-50 rounded-2xl border border-gray-100 flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-bold text-cura-dark">Verify 80G Receipts</p>
+                  <p className="text-sm font-bold text-cura-dark">Verify Receipts</p>
                   <p className="text-[10px] text-cura-grey">10:00 AM - 10:30 AM</p>
                 </div>
                 <div className="w-8 h-4 bg-cura-blue rounded-full relative">

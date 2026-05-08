@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 
-const Sidebar = ({ activeTab, setActiveTab }) => {
+const Sidebar = ({ activeTab, setActiveTab, badges }) => {
   const [expanded, setExpanded] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const profileRef = useRef(null);
@@ -20,7 +20,8 @@ const Sidebar = ({ activeTab, setActiveTab }) => {
     { id: 'dashboard', icon: '📊', label: 'Dashboard' },
     { id: 'inventory', icon: '📦', label: 'Inventory' },
     { id: 'ledger', icon: '📜', label: 'Ledger' },
-    { id: 'approvals', icon: '✅', label: 'Approvals' },
+    { id: 'approvals', icon: '✅', label: 'Approvals', badge: badges?.approvals },
+    { id: 'automations', icon: '🤖', label: 'Automations'},
   ];
 
   const profileMenuItems = [
@@ -53,26 +54,37 @@ const Sidebar = ({ activeTab, setActiveTab }) => {
       <div className={`h-px bg-gray-200 ${expanded ? 'w-4/5' : 'w-10'} transition-all duration-300`} />
 
       {/* Navigation Items */}
-      {navItems.map((item) => (
-        <button
-          key={item.id}
-          onClick={() => setActiveTab(item.id)}
-          className={`${
-            expanded ? 'w-4/5 px-4' : 'w-12 justify-center'
-          } flex items-center gap-3 p-3 rounded-xl transition-all duration-200 cursor-pointer ${
-            activeTab === item.id
-              ? 'bg-cura-blue text-white shadow-lg shadow-blue-900/30'
-              : 'text-cura-grey hover:bg-cura-blue/10 hover:text-cura-blue'
-          }`}
-        >
-          <span className="text-xl flex-shrink-0">{item.icon}</span>
-          {expanded && (
-            <span className="text-sm font-medium whitespace-nowrap overflow-hidden">
-              {item.label}
-            </span>
-          )}
-        </button>
-      ))}
+      <div className="flex flex-col gap-2 w-full items-center">
+        {navItems.map((item) => (
+          <button
+            key={item.id}
+            onClick={() => setActiveTab(item.id)}
+            className={`${
+              expanded ? 'w-4/5 px-4' : 'w-12 justify-center'
+            } flex items-center gap-3 p-3 rounded-xl transition-all duration-200 cursor-pointer relative ${
+              activeTab === item.id
+                ? 'bg-cura-blue text-white shadow-lg shadow-blue-900/30'
+                : 'text-cura-grey hover:bg-cura-blue/10 hover:text-cura-blue'
+            }`}
+          >
+            <span className="text-xl flex-shrink-0">{item.icon}</span>
+            {expanded && (
+              <span className="text-sm font-medium whitespace-nowrap overflow-hidden">
+                {item.label}
+              </span>
+            )}
+            
+            {/* Badge System */}
+            {item.badge > 0 && (
+              <span className={`absolute bg-red-500 text-white text-[10px] font-bold flex items-center justify-center rounded-full border-2 border-white transition-all duration-300 ${
+                expanded ? 'right-4 w-5 h-5' : 'top-1 right-1 w-4 h-4'
+              }`}>
+                {item.badge}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
 
       {/* Spacer to push profile to bottom */}
       <div className="flex-1" />
