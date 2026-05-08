@@ -36,31 +36,19 @@ const MOCK_PENDING_POOLS = [
 // --- Sub-components ---
 
 const StatusBadge = ({ status }) => {
-  const styles = {
-    'Verified': 'bg-emerald-50 text-emerald-700 border-emerald-100',
-    'Pending Review': 'bg-amber-50 text-amber-700 border-amber-100',
-    'Mismatch': 'bg-red-50 text-red-700 border-red-100',
-    'Not Uploaded': 'bg-gray-100 text-cura-grey border-gray-200',
-    'Auto-Verified': 'bg-blue-50 text-cura-blue border-blue-100',
-  };
-
   return (
-    <span className={`px-3 py-1 rounded-full text-[11px] font-semibold border flex items-center gap-1.5 w-fit ${styles[status]}`}>
-      <span className={`w-1.5 h-1.5 rounded-full ${status === 'Auto-Verified' ? 'bg-cura-blue animate-pulse' : 'bg-current'}`} />
+    <span className="px-3 py-1 rounded-full text-[11px] font-semibold border bg-gray-100 text-cura-dark border-gray-200 flex items-center gap-1.5 w-fit">
       {status}
     </span>
   );
 };
 
 const SummaryCard = ({ title, value, change, isPending }) => (
-  <div className={`p-6 rounded-2xl border shadow-sm transition-all hover:shadow-md ${isPending ? 'bg-amber-50/50 border-amber-100' : 'bg-white border-gray-100'}`}>
+  <div className="bg-white border-gray-100 p-6 rounded-2xl border shadow-sm transition-all hover:shadow-md">
     <p className="text-cura-grey text-[10px] font-bold uppercase tracking-widest mb-2">{title}</p>
     <div className="flex items-end justify-between">
       <h3 className="text-3xl font-bold text-cura-dark tracking-tight">₹{value.toLocaleString()}</h3>
-      <span className={`flex items-center text-xs font-bold px-2 py-1 rounded-lg ${
-        change > 0 ? 'bg-emerald-100 text-emerald-700' : 
-        change < 0 ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'
-      }`}>
+      <span className="flex items-center text-xs font-bold px-2 py-1 rounded-lg bg-gray-100 text-cura-dark">
         {change > 0 ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}
         {Math.abs(change)}%
       </span>
@@ -234,7 +222,7 @@ export default function Ledger() {
                   </span>
                 </td>
                 <td className="px-6 py-4">
-                  <span className={`text-[11px] font-bold ${tx.type === 'Inflow' ? 'text-emerald-600' : 'text-orange-600'}`}>
+                  <span className="text-[11px] font-bold text-cura-dark">
                     {tx.type}
                   </span>
                 </td>

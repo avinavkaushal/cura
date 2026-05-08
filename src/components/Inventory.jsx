@@ -1,244 +1,310 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
+import { 
+  AreaChart, Area, ResponsiveContainer, Tooltip, XAxis 
+} from 'recharts';
+import { 
+  Search, Filter, ChevronDown, ChevronUp, Bot, 
+  TrendingDown, AlertCircle, Clock, History, CheckCircle2, 
+  ArrowRight, Zap
+} from 'lucide-react';
 
+// --- MOCK DATA ---
 const inventoryData = [
-  { id: 1, name: "Basmati Rice", category: "Food & Rations", stock: 120, unit: "kg", consumption: 150, lastRestocked: "2024-04-10" },
-  { id: 2, name: "Lentils (Dal)", category: "Food & Rations", stock: 15, unit: "kg", consumption: 80, lastRestocked: "2024-04-05" },
-  { id: 3, name: "Paracetamol", category: "Medicines", stock: 450, unit: "tabs", consumption: 200, lastRestocked: "2024-03-28" },
-  { id: 4, name: "Milk Powder", category: "Food & Rations", stock: 5, unit: "kg", consumption: 40, lastRestocked: "2024-04-12" },
-  { id: 5, name: "Notebooks (A5)", category: "Education", stock: 85, unit: "pcs", consumption: 60, lastRestocked: "2024-02-15" },
-  { id: 6, name: "Antiseptic Liquid", category: "Hygiene", stock: 12, unit: "L", consumption: 10, lastRestocked: "2024-04-01" },
-  { id: 7, name: "Solar Lanterns", category: "Equipment", stock: 2, unit: "pcs", consumption: 0.5, lastRestocked: "2023-11-20" },
-  { id: 8, name: "Amoxicillin", category: "Medicines", stock: 8, unit: "vials", consumption: 25, lastRestocked: "2024-04-14" },
+  { 
+    id: 1, name: "Basmati Rice", category: "Food", stock: 120, unit: "kg", consumption: 15, 
+    status: 'healthy',
+    trend: [{day: 'Mon', val: 140}, {day: 'Tue', val: 135}, {day: 'Wed', val: 130}, {day: 'Thu', val: 125}, {day: 'Fri', val: 120}]
+  },
+  { 
+    id: 2, name: "Lentils (Dal)", category: "Food", stock: 15, unit: "kg", consumption: 8, 
+    status: 'critical',
+    trend: [{day: 'Mon', val: 40}, {day: 'Tue', val: 32}, {day: 'Wed', val: 24}, {day: 'Thu', val: 18}, {day: 'Fri', val: 15}]
+  },
+  { 
+    id: 3, name: "Paracetamol", category: "Medical", stock: 450, unit: "tabs", consumption: 20, 
+    status: 'healthy',
+    trend: [{day: 'Mon', val: 500}, {day: 'Tue', val: 480}, {day: 'Wed', val: 470}, {day: 'Thu', val: 460}, {day: 'Fri', val: 450}]
+  },
+  { 
+    id: 4, name: "Antiseptic Liquid", category: "Hygiene", stock: 12, unit: "L", consumption: 2, 
+    status: 'warning',
+    trend: [{day: 'Mon', val: 18}, {day: 'Tue', val: 16}, {day: 'Wed', val: 15}, {day: 'Thu', val: 13}, {day: 'Fri', val: 12}]
+  }
 ];
 
-const vendorQuotes = [
-  { id: 'v1', name: "Global Wholesale", price: "₹42/unit", delivery: "2 days", score: 4.8, recommended: true },
-  { id: 'v2', name: "Local Mandi Services", price: "₹45/unit", delivery: "1 day", score: 4.2, recommended: false },
-  { id: 'v3', name: "Standard Supplies Co.", price: "₹40/unit", delivery: "5 days", score: 3.9, recommended: false },
+const reorderHistory = [
+  { id: 'PO-209', date: '12 May 2024', item: 'Notebooks (A5)', qty: '200 pcs', vendor: 'Standard Supplies Co.', status: 'Delivered' },
+  { id: 'PO-208', date: '08 May 2024', item: 'Milk Powder', qty: '50 kg', vendor: 'Global Wholesale', status: 'Delivered' },
+  { id: 'PO-207', date: '05 May 2024', item: 'Amoxicillin', qty: '100 vials', vendor: 'Apollo Med', status: 'Delivered' },
 ];
 
-const Inventory = () => {
-  const [activeTab, setActiveTab] = useState('All');
-  const [bannerDismissed, setBannerDismissed] = useState(false);
-  const [expandedRow, setExpandedRow] = useState(null);
-  const [autoDecide, setAutoDecide] = useState(false);
+const AI_REASONING_STEPS = [
+  "Analyzing consumption rate vs current stock...",
+  "Querying top 3 local vendors via WhatsApp API...",
+  "Comparing quotes & calculating trust scores...",
+  "Recommendation ready for approval."
+];
 
-  const categories = ['All', 'Food & Rations', 'Medicines', 'Education', 'Hygiene', 'Equipment'];
+// --- SUB-COMPONENTS ---
 
-  // Data processing
-  const processedData = useMemo(() => {
-    return inventoryData.map(item => {
-      const daysUntilStockout = item.consumption > 0 ? Math.floor((item.stock / item.consumption) * 30) : 999;
-      let status = "Healthy";
-      if (daysUntilStockout < 7) status = "Critical";
-      else if (daysUntilStockout <= 14) status = "Low";
-      
-      return { ...item, daysUntilStockout, status };
-    })
-    .filter(item => activeTab === 'All' || item.category === activeTab)
-    .sort((a, b) => a.daysUntilStockout - b.daysUntilStockout);
-  }, [activeTab]);
+// Custom Tooltip for Sparkline
+const SparklineTooltip = ({ active, payload }) => {
+  if (active && payload && payload.length) {
+    return (
+      <div className="bg-cura-dark text-white text-[10px] font-bold px-2 py-1 rounded-md shadow-lg">
+        {payload[0].value}
+      </div>
+    );
+  }
+  return null;
+};
 
-  const stats = {
-    total: inventoryData.length,
-    needsReorder: inventoryData.filter(i => (i.stock / i.consumption) * 30 <= 14).length,
-    estSpend: "₹12,400"
+// Expandable Row Component
+const InventoryRow = ({ item }) => {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [sourcingState, setSourcingState] = useState('idle'); // idle | thinking | done
+  const [reasoningStep, setReasoningStep] = useState(0);
+
+  const daysLeft = Math.floor(item.stock / item.consumption);
+  
+  // Simulate AI Agent Process
+  const triggerSourcing = () => {
+    setSourcingState('thinking');
+    setReasoningStep(0);
+    
+    let step = 0;
+    const interval = setInterval(() => {
+      step += 1;
+      if (step < AI_REASONING_STEPS.length) {
+        setReasoningStep(step);
+      } else {
+        clearInterval(interval);
+        setSourcingState('done');
+      }
+    }, 1500); // 1.5 seconds per step
   };
 
   return (
-    <div className="font-jost text-cura-dark space-y-6">
-      {/* 1. Category Tab Bar */}
-      <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
-        {categories.map(cat => {
-          const count = cat === 'All' ? inventoryData.length : inventoryData.filter(i => i.category === cat).length;
-          return (
-            <button
-              key={cat}
-              onClick={() => setActiveTab(cat)}
-              className={`flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-bold transition-all whitespace-nowrap cursor-pointer ${
-                activeTab === cat ? 'bg-cura-blue text-white shadow-lg shadow-blue-900/20' : 'bg-gray-100 text-cura-grey hover:bg-gray-200'
-              }`}
-            >
-              {cat}
-              <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${activeTab === cat ? 'bg-white/20' : 'bg-gray-200'}`}>
-                {count}
-              </span>
-            </button>
-          );
-        })}
-      </div>
-
-      {/* 2. Stats Bar */}
-      <div className="flex flex-wrap gap-6 items-center px-2 py-1">
-        <div className="flex items-center gap-2">
-          <span className="text-cura-grey text-xs font-bold uppercase tracking-widest">Total SKUs:</span>
-          <span className="text-sm font-bold">{stats.total}</span>
-        </div>
-        <div className="w-px h-4 bg-gray-200" />
-        <div className="flex items-center gap-2">
-          <span className="text-cura-grey text-xs font-bold uppercase tracking-widest">Needs Reorder:</span>
-          <span className="text-sm font-bold text-red-500">{stats.needsReorder}</span>
-        </div>
-        <div className="w-px h-4 bg-gray-200" />
-        <div className="flex items-center gap-2">
-          <span className="text-cura-grey text-xs font-bold uppercase tracking-widest">Est. Spend:</span>
-          <span className="text-sm font-bold text-cura-blue">{stats.estSpend}</span>
-        </div>
-      </div>
-
-      {/* 3. AI Insights Banner */}
-      {!bannerDismissed && processedData.some(i => i.status !== 'Healthy') && (
-        <div className="bg-white border-l-4 border-cura-blue rounded-2xl shadow-sm p-5 flex flex-col md:flex-row justify-between items-center gap-4">
-          <div className="flex items-start gap-3">
-            <span className="text-xl">💡</span>
+    <>
+      <tr 
+        className={`border-b border-gray-50 transition-colors hover:bg-gray-50/50 cursor-pointer ${isExpanded ? 'bg-blue-50/30' : ''}`}
+        onClick={() => setIsExpanded(!isExpanded)}
+      >
+        <td className="py-5 px-6">
+          <div className="flex items-center gap-3">
             <div>
-              <p className="text-sm font-medium">
-                <span className="font-bold">{processedData.filter(i => i.status !== 'Healthy').length} items</span> in {activeTab} are predicted to stock out soon. AI sourcing agents have pre-fetched local quotes.
-              </p>
+              <p className="font-bold text-cura-dark">{item.name}</p>
+              <p className="text-[10px] uppercase tracking-wider text-cura-grey font-bold">{item.category}</p>
             </div>
           </div>
-          <div className="flex items-center gap-3 w-full md:w-auto">
-            <button className="flex-1 md:flex-none bg-cura-blue text-white px-6 py-2 rounded-xl text-xs font-bold shadow-md hover:opacity-90">
-              Review & Approve
-            </button>
-            <button onClick={() => setBannerDismissed(true)} className="text-cura-grey hover:text-cura-dark p-1">
-              ✕
-            </button>
+        </td>
+        <td className="py-5 px-6">
+          <span className="font-bold text-lg">{item.stock}</span>
+          <span className="text-xs text-cura-grey ml-1">{item.unit}</span>
+        </td>
+        <td className="py-5 px-6">
+          <div className="flex items-center gap-2">
+            <TrendingDown size={14} className="text-cura-grey" />
+            <span className="text-sm font-semibold">{item.consumption} {item.unit}/day</span>
           </div>
-        </div>
-      )}
+        </td>
+        <td className="py-5 px-6">
+          <span className="px-3 py-1 rounded-full text-xs font-bold bg-gray-100 text-cura-dark">
+            {daysLeft} Days Left
+          </span>
+        </td>
+        <td className="py-5 px-6 text-right">
+          <button className="text-cura-grey hover:text-cura-blue transition-colors">
+            {isExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+          </button>
+        </td>
+      </tr>
 
-      {/* 4. Inventory Table */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+      {/* EXPANDED CONTENT AREA */}
+      {isExpanded && (
+        <tr>
+          <td colSpan="5" className="px-6 py-0 bg-blue-50/10 border-b border-gray-100">
+            <div className="py-6 grid grid-cols-1 md:grid-cols-2 gap-8 animate-in fade-in slide-in-from-top-2 duration-300">
+              
+              {/* Left: Consumption Sparkline */}
+              <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-cura-grey mb-4">Consumption Trend (Past 5 Days)</h4>
+                <div className="h-32 w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={item.trend} margin={{ top: 5, right: 0, left: 0, bottom: 0 }}>
+                      <defs>
+                        <linearGradient id="colorVal" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#17439B" stopOpacity={0.3}/>
+                          <stop offset="95%" stopColor="#17439B" stopOpacity={0}/>
+                        </linearGradient>
+                      </defs>
+                      <Tooltip content={<SparklineTooltip />} cursor={{ stroke: '#17439B', strokeWidth: 1, strokeDasharray: '4 4' }} />
+                      <Area type="monotone" dataKey="val" stroke="#17439B" strokeWidth={3} fillOpacity={1} fill="url(#colorVal)" />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              {/* Right: AI Sourcing Panel */}
+              <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm flex flex-col justify-center">
+                {sourcingState === 'idle' && (
+                  <div className="text-center space-y-4">
+                    <Bot size={32} className="mx-auto text-cura-grey opacity-50" />
+                    <div>
+                      <h4 className="font-bold text-cura-dark">Agent Standing By</h4>
+                      <p className="text-xs text-cura-grey mt-1">Trigger the AI to find the best local vendor quotes.</p>
+                    </div>
+                    <button 
+                      onClick={triggerSourcing}
+                      className="bg-cura-blue text-white px-6 py-2.5 rounded-xl text-sm font-bold shadow-lg shadow-blue-200 hover:scale-105 transition-all flex items-center gap-2 mx-auto"
+                    >
+                      <Zap size={16} /> Trigger AI Sourcing
+                    </button>
+                  </div>
+                )}
+
+                {sourcingState === 'thinking' && (
+                  <div className="space-y-4 w-full max-w-sm mx-auto">
+                    <div className="flex items-center gap-3 text-cura-blue font-bold mb-6">
+                      <Bot size={24} className="animate-pulse" />
+                      <span>Agent At Work...</span>
+                    </div>
+                    <div className="space-y-3">
+                      {AI_REASONING_STEPS.map((stepText, idx) => (
+                        <div key={idx} className={`flex items-start gap-3 transition-opacity duration-500 ${idx > reasoningStep ? 'opacity-20' : 'opacity-100'}`}>
+                          {idx < reasoningStep ? (
+                            <CheckCircle2 size={16} className="text-green-500 mt-0.5 shrink-0" />
+                          ) : idx === reasoningStep ? (
+                            <div className="w-4 h-4 rounded-full border-2 border-cura-blue border-t-transparent animate-spin mt-0.5 shrink-0" />
+                          ) : (
+                            <div className="w-4 h-4 rounded-full border-2 border-gray-200 mt-0.5 shrink-0" />
+                          )}
+                          <p className={`text-sm ${idx === reasoningStep ? 'text-cura-dark font-semibold' : 'text-cura-grey'}`}>
+                            {stepText}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {sourcingState === 'done' && (
+                  <div className="w-full h-full flex flex-col justify-center text-center space-y-3 animate-in zoom-in-95 duration-300">
+                    <div className="w-12 h-12 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-2">
+                      <CheckCircle2 size={24} />
+                    </div>
+                    <h4 className="font-bold text-lg text-cura-dark">Quotes Sourced</h4>
+                    <p className="text-xs text-cura-grey pb-2">3 local vendors evaluated. Best match found.</p>
+                    <button className="bg-cura-dark text-white px-6 py-2.5 rounded-xl text-sm font-bold shadow-md hover:bg-gray-800 transition-colors flex items-center justify-center gap-2 w-full">
+                      View in Approvals <ArrowRight size={16} />
+                    </button>
+                  </div>
+                )}
+              </div>
+
+            </div>
+          </td>
+        </tr>
+      )}
+    </>
+  );
+};
+
+// --- MAIN INVENTORY COMPONENT ---
+const Inventory = () => {
+  const [activeTab, setActiveTab] = useState('All');
+  const tabs = ['All', 'Food', 'Medical', 'Education', 'Hygiene'];
+
+  return (
+    <div className="w-full min-h-screen bg-gray-50 p-8 font-jost text-cura-dark flex flex-col gap-8">
+      
+      {/* Header & Controls */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+          <h2 className="text-2xl font-bold tracking-tight">Resource Inventory</h2>
+          <p className="text-sm text-cura-grey font-medium mt-1">Predictive tracking & autonomous procurement</p>
+        </div>
+        
+        <div className="flex items-center gap-3 w-full md:w-auto">
+          <div className="relative flex-1 md:w-64">
+            <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input 
+              type="text" 
+              placeholder="Search items..." 
+              className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-200 rounded-2xl text-sm focus:outline-none focus:border-cura-blue focus:ring-1 focus:ring-cura-blue transition-all"
+            />
+          </div>
+          <button className="p-2.5 bg-white border border-gray-200 rounded-2xl text-cura-dark hover:bg-gray-50 transition-colors">
+            <Filter size={18} />
+          </button>
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+        {tabs.map(tab => (
+          <button 
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            className={`px-5 py-2 rounded-full text-sm font-bold whitespace-nowrap transition-all ${
+              activeTab === tab ? 'bg-cura-dark text-white shadow-md' : 'bg-white text-cura-grey border border-gray-200 hover:border-gray-300'
+            }`}
+          >
+            {tab}
+          </button>
+        ))}
+      </div>
+
+      {/* Main Table Card */}
+      <div className="bg-white rounded-[2.5rem] shadow-sm shadow-gray-100/50 border border-gray-100 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left">
-            <thead>
-              <tr className="bg-gray-50/50 border-b border-gray-100 text-cura-grey text-[10px] font-bold uppercase tracking-widest">
-                <th className="px-6 py-4">Item Name</th>
-                <th className="px-6 py-4">Current Stock</th>
-                <th className="px-6 py-4">Consumption/Mo</th>
-                <th className="px-6 py-4">Est. Exhaustion</th>
-                <th className="px-6 py-4">Status</th>
-                <th className="px-6 py-4">Last Restock</th>
-                <th className="px-6 py-4 text-right">Action</th>
+            <thead className="bg-gray-50/50 text-[10px] uppercase tracking-wider text-cura-grey font-bold">
+              <tr>
+                <th className="py-4 px-6 rounded-tl-[2.5rem]">Item & Category</th>
+                <th className="py-4 px-6">Current Stock</th>
+                <th className="py-4 px-6">Est. Consumption</th>
+                <th className="py-4 px-6">Predicted Stockout</th>
+                <th className="py-4 px-6 text-right rounded-tr-[2.5rem]">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-50">
-              {processedData.map((item) => (
-                <React.Fragment key={item.id}>
-                  <tr className={`transition-colors ${expandedRow === item.id ? 'bg-blue-50/30' : 'hover:bg-gray-50/50'}`}>
-                    <td className="px-6 py-5">
-                      <div className="flex flex-col">
-                        <span className="font-bold text-sm">{item.name}</span>
-                        <span className="text-[10px] text-cura-grey uppercase tracking-tighter">{item.category}</span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-5 text-sm font-medium">{item.stock} {item.unit}</td>
-                    <td className="px-6 py-5 text-sm text-cura-grey">{item.consumption} {item.unit}</td>
-                    <td className="px-6 py-5">
-                      <span className={`text-xs font-bold ${
-                        item.daysUntilStockout < 7 ? 'text-red-500' : item.daysUntilStockout <= 14 ? 'text-amber-500' : 'text-green-600'
-                      }`}>
-                        {item.daysUntilStockout} days
-                      </span>
-                    </td>
-                    <td className="px-6 py-5">
-                      <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase ${
-                        item.status === 'Critical' ? 'bg-red-100 text-red-600' : 
-                        item.status === 'Low' ? 'bg-amber-100 text-amber-600' : 'bg-green-100 text-green-600'
-                      }`}>
-                        {item.status}
-                      </span>
-                    </td>
-                    <td className="px-6 py-5 text-xs text-cura-grey">{item.lastRestocked}</td>
-                    <td className="px-6 py-5 text-right">
-                      <button 
-                        onClick={() => setExpandedRow(expandedRow === item.id ? null : item.id)}
-                        className={`text-xs font-bold transition-all px-4 py-2 rounded-lg cursor-pointer ${
-                          item.status === 'Healthy' 
-                          ? 'text-cura-grey hover:bg-gray-100' 
-                          : 'bg-cura-blue text-white shadow-sm hover:shadow-md'
-                        }`}
-                      >
-                        {item.status === 'Healthy' ? 'View History' : 'AI Source Now'}
-                      </button>
-                    </td>
-                  </tr>
-
-                  {/* 5. Sourcing Drawer (Inline Accordion) */}
-                  {expandedRow === item.id && (
-                    <tr>
-                      <td colSpan="7" className="px-6 pb-6 bg-blue-50/30">
-                        <div className="bg-white rounded-xl border border-blue-100 p-6 shadow-sm animate-in fade-in slide-in-from-top-2 duration-300">
-                          <div className="flex justify-between items-center mb-6">
-                            <div>
-                              <h4 className="text-sm font-bold flex items-center gap-2">
-                                <span className="p-1 bg-blue-100 rounded text-xs">🤖</span>
-                                AI Negotiated Quotes for {item.name}
-                              </h4>
-                              <p className="text-xs text-cura-grey mt-1">Based on ONDC & local vendor network.</p>
-                            </div>
-                            <div className="flex items-center gap-3">
-                              <label className="text-[10px] font-bold uppercase text-cura-grey flex items-center gap-2">
-                                Let AI Decide
-                                <div 
-                                  onClick={() => setAutoDecide(!autoDecide)}
-                                  className={`w-8 h-4 rounded-full relative transition-colors duration-200 cursor-pointer ${autoDecide ? 'bg-cura-blue' : 'bg-gray-200'}`}
-                                >
-                                  <div className={`absolute top-0.5 w-3 h-3 bg-white rounded-full transition-all ${autoDecide ? 'left-4.5' : 'left-0.5'}`} />
-                                </div>
-                              </label>
-                            </div>
-                          </div>
-
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            {vendorQuotes.map(quote => (
-                              <div 
-                                key={quote.id} 
-                                className={`p-4 rounded-xl border-2 transition-all flex flex-col justify-between ${
-                                  quote.recommended ? 'border-cura-blue ring-4 ring-blue-100' : 'border-gray-100 hover:border-gray-200'
-                                }`}
-                              >
-                                <div>
-                                  <div className="flex justify-between items-start mb-2">
-                                    <span className="text-xs font-bold truncate max-w-[120px]">{quote.name}</span>
-                                    {quote.recommended && (
-                                      <span className="text-[8px] bg-cura-blue text-white px-2 py-0.5 rounded-full font-bold uppercase">Best Value</span>
-                                    )}
-                                  </div>
-                                  <div className="flex items-end gap-2 mb-3">
-                                    <span className="text-lg font-bold text-cura-blue">{quote.price}</span>
-                                    <span className="text-[10px] text-cura-grey mb-1">/ unit</span>
-                                  </div>
-                                  <div className="space-y-1 text-[10px] text-cura-grey">
-                                    <div className="flex justify-between">
-                                      <span>Delivery:</span>
-                                      <span className="font-bold text-cura-dark">{quote.delivery}</span>
-                                    </div>
-                                    <div className="flex justify-between">
-                                      <span>Trust Score:</span>
-                                      <span className="font-bold text-cura-dark">⭐ {quote.score}/5</span>
-                                    </div>
-                                  </div>
-                                </div>
-                                <button className={`w-full mt-4 py-2 rounded-lg text-[10px] font-bold transition-all ${
-                                  quote.recommended ? 'bg-cura-blue text-white' : 'bg-gray-50 text-cura-grey hover:bg-gray-100'
-                                }`}>
-                                  Approve Quote
-                                </button>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      </td>
-                    </tr>
-                  )}
-                </React.Fragment>
+            <tbody>
+              {inventoryData.filter(item => activeTab === 'All' || item.category === activeTab).map(item => (
+                <InventoryRow key={item.id} item={item} />
               ))}
             </tbody>
           </table>
         </div>
       </div>
+
+      {/* Reorder History Section */}
+      <div className="mt-4">
+        <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
+          <History size={18} className="text-cura-blue" />
+          Recent Reorder History
+        </h3>
+        <div className="bg-white rounded-3xl p-6 shadow-sm shadow-gray-100/50 border border-gray-100">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {reorderHistory.map((record, idx) => (
+              <div key={idx} className="p-4 rounded-2xl border border-gray-100 bg-gray-50/50 flex flex-col gap-2 transition-all hover:bg-gray-50">
+                <div className="flex justify-between items-start">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-cura-blue bg-blue-50 px-2 py-0.5 rounded-md">
+                    {record.id}
+                  </span>
+                  <span className="text-xs font-semibold text-cura-grey flex items-center gap-1">
+                    <Clock size={12} /> {record.date}
+                  </span>
+                </div>
+                <div>
+                  <h4 className="font-bold text-cura-dark">{record.item}</h4>
+                  <p className="text-sm text-cura-grey">{record.qty} from {record.vendor}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
     </div>
   );
 };
