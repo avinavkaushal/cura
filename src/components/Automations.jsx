@@ -57,7 +57,7 @@ const Automations = () => {
     },
     {
       id: 'compliance',
-      title: '80G Receipt Generation',
+      title: 'Receipt Generation',
       agent: 'Compliance Agent',
       description: 'AI generates and verifies tax-exemption receipts for Indian donors automatically.',
       status: 'approval'
