@@ -1,18 +1,18 @@
 import React, { useState } from 'react';
 
 const AutomationCard = ({ title, description, agent, status, onToggle }) => (
-  <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col gap-4">
+  <div className="bg-white dark:bg-gray-900 p-6 rounded-2xl shadow-sm dark:shadow-none border border-gray-100 dark:border-gray-800 flex flex-col gap-4">
     <div className="flex justify-between items-start">
       <div>
-        <span className="text-[10px] font-bold uppercase tracking-wider text-cura-blue bg-blue-50 px-2 py-1 rounded-md mb-2 inline-block">
+        <span className="text-[10px] font-bold uppercase tracking-wider text-cura-blue dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 px-2 py-1 rounded-md mb-2 inline-block">
           {agent}
         </span>
-        <h3 className="text-lg font-bold text-cura-dark">{title}</h3>
+        <h3 className="text-lg font-bold text-cura-dark dark:text-gray-100">{title}</h3>
       </div>
       <div 
         onClick={onToggle}
         className={`w-12 h-6 rounded-full relative cursor-pointer transition-colors duration-200 ${
-          status === 'autonomous' ? 'bg-cura-blue' : 'bg-gray-200'
+          status === 'autonomous' ? 'bg-cura-blue' : 'bg-gray-200 dark:bg-gray-700'
         }`}
       >
         <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all duration-200 ${
@@ -20,12 +20,12 @@ const AutomationCard = ({ title, description, agent, status, onToggle }) => (
         }`} />
       </div>
     </div>
-    <p className="text-sm text-cura-grey leading-relaxed">
+    <p className="text-sm text-cura-grey dark:text-gray-400 leading-relaxed">
       {description}
     </p>
     <div className="flex items-center gap-2 mt-2">
       <div className={`w-2 h-2 rounded-full ${status === 'autonomous' ? 'bg-green-500 animate-pulse' : 'bg-amber-500'}`} />
-      <span className="text-[10px] font-bold uppercase text-cura-grey">
+      <span className="text-[10px] font-bold uppercase text-cura-grey dark:text-gray-500">
         Mode: {status === 'autonomous' ? 'Full Autonomy' : 'Human Approval Required'}
       </span>
     </div>
@@ -73,10 +73,10 @@ const Automations = () => {
   return (
     <div className="space-y-8 font-jost">
       <div className="max-w-2xl">
-        <h2 className="text-2xl font-bold text-cura-dark">AI Governance & Automations</h2>
-        <p className="text-cura-grey text-sm mt-2">
+        <h2 className="text-2xl font-bold text-cura-dark dark:text-gray-100">AI Governance & Automations</h2>
+        <p className="text-cura-grey dark:text-gray-400 text-sm mt-2">
           Configure the "Human-in-the-Loop" guardrails for CURA's autonomous agents. 
-          Tasks set to <b>Approval</b> will queue in the Approvals tab.
+          Tasks set to <b className="dark:text-gray-200">Approval</b> will queue in the Approvals tab.
         </p>
       </div>
 
