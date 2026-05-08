@@ -4,6 +4,22 @@ import requests
 import pywhatkit
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
+from fastapi.middleware.cors import CORSMiddleware
+
+app = FastAPI(title="CURA AI Core - Local Swarm Edition", version="1.0")
+
+# The precise, secure CORS configuration
+app.add_middleware(
+    CORSMiddleware,
+    # Explicitly whitelist Vite's default local ports instead of using "*"
+    allow_origins=[
+        "http://localhost:5173", 
+        "http://127.0.0.1:5173"
+    ], 
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 app = FastAPI(title="CURA AI Core - Local Swarm Edition", version="1.0")
 
