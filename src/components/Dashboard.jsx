@@ -1,4 +1,5 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   BarChart, Bar, ResponsiveContainer, XAxis, Tooltip, Cell 
 } from 'recharts';
@@ -8,10 +9,11 @@ import {
 } from 'lucide-react';
 
 // --- MOCK DATA ---
+// ADDED routes to each alert
 const alertData = [
-  { id: 1, type: 'danger', icon: AlertTriangle, title: '3 Low Stock Items', action: 'Review Stock', color: 'text-red-600', bg: 'bg-red-50', border: 'border-red-100' },
-  { id: 2, type: 'warning', icon: Clock, title: '2 Pending Approvals', action: 'Approve Now', color: 'text-amber-600', bg: 'bg-amber-50', border: 'border-amber-100' },
-  { id: 3, type: 'info', icon: FileWarning, title: '4 Unverified Receipts', action: 'Verify Receipts', color: 'text-blue-600', bg: 'bg-blue-50', border: 'border-blue-100' },
+  { id: 1, type: 'danger', icon: AlertTriangle, title: '3 Low Stock Items', action: 'Review Stock', color: 'text-red-600', bg: 'bg-red-50', border: 'border-red-100', route: '/inventory' },
+  { id: 2, type: 'warning', icon: Clock, title: '2 Pending Approvals', action: 'Approve Now', color: 'text-amber-600', bg: 'bg-amber-50', border: 'border-amber-100', route: '/approvals' },
+  { id: 3, type: 'info', icon: FileWarning, title: '4 Unverified Receipts', action: 'Verify Receipts', color: 'text-blue-600', bg: 'bg-blue-50', border: 'border-blue-100', route: '/ledger' },
 ];
 
 const statData = [
@@ -45,7 +47,6 @@ const CuraStatCard = ({ title, value, trend, chartData }) => (
     <p className="text-xs font-semibold text-cura-blue">
       {trend}
     </p>
-    {/* Minimal inline sparkline replacing standard charts for density */}
     <div className="mt-4 h-12 w-full opacity-60">
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={chartData.map((val, i) => ({ value: val, index: i }))}>
@@ -69,6 +70,8 @@ const CustomTooltip = ({ active, payload }) => {
 
 // --- MAIN COMPONENT ---
 const Dashboard = () => {
+  const navigate = useNavigate(); // ADDED hook
+
   return (
     <div className="w-full min-h-screen bg-gray-50 p-8 font-jost text-cura-dark flex flex-col gap-8">
       
@@ -85,7 +88,11 @@ const Dashboard = () => {
                 <p className="text-[10px] uppercase tracking-wider font-bold text-gray-500 mt-1">Needs Attention</p>
               </div>
             </div>
-            <button className={`flex items-center gap-1 text-xs font-bold ${alert.color} hover:opacity-70 transition-opacity`}>
+            {/* ADDED onClick navigation */}
+            <button 
+              onClick={() => navigate(alert.route)}
+              className={`flex items-center gap-1 text-xs font-bold ${alert.color} hover:opacity-70 transition-opacity`}
+            >
               {alert.action} <ArrowRight size={14} strokeWidth={3} />
             </button>
           </div>
@@ -199,16 +206,17 @@ const Dashboard = () => {
             <p className="text-xs text-gray-400 mb-6 font-medium">Manual system overrides</p>
             
             <div className="space-y-3">
-              <button className="w-full bg-white/10 hover:bg-white/20 transition-all text-white font-semibold py-3 px-4 rounded-2xl flex items-center justify-between group">
+              {/* ADDED onClick navigation here as well just to be thorough */}
+              <button onClick={() => navigate('/inventory')} className="w-full bg-white/10 hover:bg-white/20 transition-all text-white font-semibold py-3 px-4 rounded-2xl flex items-center justify-between group">
                 <span className="flex items-center gap-3 text-sm">
                   <Tag size={16} /> Trigger AI Sourcing
                 </span>
                 <ArrowRight size={16} className="opacity-50 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
               </button>
               
-              <button className="w-full bg-white/10 hover:bg-white/20 transition-all text-white font-semibold py-3 px-4 rounded-2xl flex items-center justify-between group">
+              <button onClick={() => navigate('/ledger')} className="w-full bg-white/10 hover:bg-white/20 transition-all text-white font-semibold py-3 px-4 rounded-2xl flex items-center justify-between group">
                 <span className="flex items-center gap-3 text-sm">
-                  <FileText size={16} /> Generate 80G Report
+                  <FileText size={16} /> Generate Report
                 </span>
                 <ArrowRight size={16} className="opacity-50 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
               </button>
@@ -222,7 +230,6 @@ const Dashboard = () => {
         </div>
       </div>
 
-      {/* Hide default scrollbar for sleekness (Optional CSS injection for this component) */}
       <style dangerouslySetInnerHTML={{__html: `
         .custom-scrollbar::-webkit-scrollbar { width: 4px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
