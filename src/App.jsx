@@ -1,122 +1,99 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
-import './App.css'
+import React, { useState, useRef, useEffect } from 'react';
+import Sidebar from './components/Sidebar';
+import Dashboard from './components/Dashboard';
+import Inventory from './components/Inventory';
+import Ledger from './components/Ledger';
+import ApprovalQueue from './components/ApprovalQueue';
 
 function App() {
-  const [count, setCount] = useState(0)
+  const [activeTab, setActiveTab] = useState('dashboard');
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef(null);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (menuRef.current && !menuRef.current.contains(e.target)) {
+        setMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const menuItems = [
+    { label: 'Profile', icon: '👤' },
+    { label: 'Settings', icon: '⚙️' },
+    { label: 'Help & Support', icon: '❓' },
+    { divider: true },
+    { label: 'Sign Out', icon: '🚪', danger: true },
+  ];
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.jsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
+    <div className="flex min-h-screen bg-gray-50 font-jost text-cura-dark">
+      {/* Sidebar - Dark theme from branding image */}
+      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
 
-      <div className="ticks"></div>
+      {/* Main Content Area */}
+      <main className="flex-1 p-8 overflow-y-auto">
+        <header className="mb-8 flex justify-between items-center">
+          <h1 className="text-2xl font-bold capitalize">
+            {activeTab.replace('-', ' ')}
+          </h1>
 
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
+          {/* Profile Avatar + Dropdown */}
+          <div className="relative" ref={menuRef}>
+            <button
+              onClick={() => setMenuOpen(!menuOpen)}
+              className="flex items-center gap-3 cursor-pointer hover:opacity-90 transition-opacity"
+            >
+              <span className="text-cura-grey text-sm hidden sm:inline">Welcome, Manager</span>
+              <div className="w-10 h-10 rounded-full bg-cura-blue text-white flex items-center justify-center font-bold shadow-md">
+                M
+              </div>
+            </button>
 
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
-  )
+            {/* Dropdown Menu */}
+            {menuOpen && (
+              <div className="absolute right-0 top-14 w-56 bg-white rounded-2xl shadow-xl border border-gray-100 py-2 z-50 animate-in">
+                {/* User Info Header */}
+                <div className="px-4 py-3 border-b border-gray-100">
+                  <p className="font-bold text-sm">Manager</p>
+                  <p className="text-cura-grey text-xs">manager@cura.org</p>
+                </div>
+
+                {/* Menu Items */}
+                {menuItems.map((item, i) =>
+                  item.divider ? (
+                    <div key={i} className="h-px bg-gray-100 my-1" />
+                  ) : (
+                    <button
+                      key={item.label}
+                      onClick={() => setMenuOpen(false)}
+                      className={`w-full text-left px-4 py-2.5 text-sm flex items-center gap-3 transition-colors cursor-pointer ${
+                        item.danger
+                          ? 'text-red-500 hover:bg-red-50'
+                          : 'text-cura-dark hover:bg-gray-50'
+                      }`}
+                    >
+                      <span>{item.icon}</span>
+                      <span className="font-medium">{item.label}</span>
+                    </button>
+                  )
+                )}
+              </div>
+            )}
+          </div>
+        </header>
+
+        {/* Dynamic Route Rendering */}
+        {activeTab === 'dashboard' && <Dashboard />}
+        {activeTab === 'inventory' && <Inventory />}
+        {activeTab === 'ledger' && <Ledger />}
+        {activeTab === 'approvals' && <ApprovalQueue />}
+      </main>
+    </div>
+  );
 }
 
-export default App
+export default App;
