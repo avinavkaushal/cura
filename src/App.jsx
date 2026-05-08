@@ -6,7 +6,10 @@ import Inventory from './components/Inventory';
 import Ledger from './components/Ledger';
 import ApprovalQueue from './components/ApprovalQueue';
 import Automations from './components/Automations';
-import { ThemeProvider } from './context/ThemeContext'; // <-- 1. Import ThemeProvider
+import { ThemeProvider } from './context/ThemeContext';
+
+import { db } from './firebase'; 
+import { ref, set, push } from "firebase/database"; 
 
 function App() {
   const location = useLocation();
