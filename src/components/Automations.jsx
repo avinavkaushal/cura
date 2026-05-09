@@ -66,20 +66,15 @@ const Automations = () => {
   const [configs, setConfigs] = useState([]);
   const [loading, setLoading] = useState(true);
   
-  // Modal State
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     title: '', agent: 'Custom Agent', description: '', status: 'approval'
   });
 
-  // Fetch or Auto-Seed Firebase
   useEffect(() => {
-    const fetchAutomations = async () => {
-      try {
-        const querySnapshot = await getDocs(collection(db, "automations"));
-        
-        if (querySnapshot.empty) {
+    const unsub = onSnapshot(collection(db, "automations"), async (snapshot) => {
+      if (snapshot.empty) {
           console.log("No automations found. Seeding default rules...");
           let newConfigs = [];
           for (const rule of defaultAutomations) {
@@ -88,36 +83,15 @@ const Automations = () => {
           }
           setConfigs(newConfigs);
         } else {
-          const fetchedConfigs = querySnapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
-          }));
-          
-          // Deduplicate based on title
-          const uniqueConfigs = [];
-          const seenTitles = new Set();
-          for (const config of fetchedConfigs) {
-            if (!seenTitles.has(config.title)) {
-              seenTitles.add(config.title);
-              uniqueConfigs.push(config);
-            } else {
-              // Found a duplicate, remove it from Firebase
-              console.log("Removing duplicate automation:", config.title);
-              await deleteDoc(doc(db, "automations", config.id));
-            }
-          }
-          
-          setConfigs(uniqueConfigs);
-        }
-        setLoading(false);
-      } catch (error) {
-        console.error("Error fetching automations:", error);
-        setLoading(false);
+      setConfigs(snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })));
       }
-    };
-
-    fetchAutomations();
-  }, []);
+    setLoading(false);
+  });
+   return () => unsub();
+}, []);
 
   // Update Firebase on Toggle
   const handleToggleStatus = async (id, currentStatus) => {
@@ -131,12 +105,9 @@ const Automations = () => {
       await updateDoc(docRef, { status: newStatus });
     } catch (error) {
       console.error("Error updating status:", error);
-      // Revert if failed
       setConfigs(configs.map(c => c.id === id ? { ...c, status: currentStatus } : c));
     }
   };
-
-  // Add Custom Rule to Firebase
   const handleAddRule = async (e) => {
     e.preventDefault();
     setIsSubmitting(true);

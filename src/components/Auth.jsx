@@ -1,4 +1,3 @@
-// src/Auth.jsx
 import React, { useState } from 'react';
 
 const Auth = ({ onLoginSuccess }) => {
@@ -8,7 +7,6 @@ const Auth = ({ onLoginSuccess }) => {
 
   const handleLoginSubmit = (e) => {
     e.preventDefault();
-    // You can add actual authentication logic here later
     if (onLoginSuccess) {
       onLoginSuccess();
     }
@@ -16,7 +14,6 @@ const Auth = ({ onLoginSuccess }) => {
 
   const handleSignupSubmit = (e) => {
     e.preventDefault();
-    // You can add actual signup logic here later
     if (onLoginSuccess) {
       onLoginSuccess();
     }

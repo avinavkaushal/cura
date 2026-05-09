@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { collection, getDocs, addDoc, onSnapshot, serverTimestamp } from "firebase/firestore";
+import { collection, addDoc, onSnapshot, serverTimestamp } from "firebase/firestore";
 import { db } from "../firebase";
 import Papa from 'papaparse';
 
@@ -32,17 +32,16 @@ const InventoryRow = ({ item, vendors }) => {
   const [sourcingState, setSourcingState] = useState('idle');
   const [reasoningStep, setReasoningStep] = useState(0);
 
-  // Dynamic calculations
   const consumption = item.daily_consumption || item.consumption || 1; 
   const stock = item.stock || 0;
+  const threshold = item.reorder_threshold || 20;
   const daysLeft = Math.floor(stock / consumption);
-  const isBelowThreshold = stock < (item.reorder_threshold || 20);
+  
+  const derivedStatus = stock <= threshold ? 'critical' : (stock <= threshold * 1.5 ? 'warning' : 'healthy');
   
   const triggerSourcing = async () => {
-    // 1. Find the best vendor in the database for this item's category
-    const relevantVendor = vendors.find(v => v.categories?.includes(item.category)) || vendors[0];
+    const preferredVendor = vendors?.find(v => v.categories?.includes(item.category)) || (vendors?.length > 0 ? vendors[0] : null);
     
-    // 1. Start UI animation
     setSourcingState('thinking');
     setReasoningStep(0);
     
@@ -51,35 +50,27 @@ const InventoryRow = ({ item, vendors }) => {
     }, 1500);
 
     try {
-      console.log(`🚀 Routing ${item.name} to the local AI Swarm...`);
-
-      // 2. THE BRIDGE: Hitting your FastAPI backend
       const response = await fetch("http://127.0.0.1:8000/trigger-procurement", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           item_name: item.name,
           current_stock: item.stock,
-          threshold: item.reorder_threshold, // Send real threshold to AI
-          vendor_name: relevantVendor?.name || "Local Market",
-          vendor_contact: relevantVendor?.whatsapp_number || ""
+          vendor_name: preferredVendor?.name || "Local Market",
+          vendor_contact: preferredVendor?.whatsapp_number || "" 
         })
       });
 
       const data = await response.json();
-      console.log("🧠 Swarm Response Received:", data);
-
-      // --- THE FIREBASE BRIDGE: Send directly to Approvals Queue ---
       const currentTime = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-      const requiredQty = 30; // Amount we asked the AI to source
 
       const newApprovalCard = {
         quoteId: `Q-${Math.floor(Math.random() * 9000) + 1000}`, 
-        vendor: data.vendor || "Local Mandi Services",
+        vendor: data.vendor || preferredVendor?.name || "Local Mandi Services",
         item: item.name,
-        quantity: `${requiredQty} ${item.unit}`,
-        price: (item.stock + requiredQty) * 45, // Generating a mock price for the UI based on stock
-        marketAvg: ((item.stock + requiredQty) * 45) + 300, // Fake market avg for the UI
+        quantity: `30 ${item.unit}`,
+        price: (stock + 30) * 45, 
+        marketAvg: ((stock + 30) * 45) + 300,
         score: 95, 
         reasoning: [
            data.agent_reasoning || "AI verified safety constraints.",
@@ -89,21 +80,17 @@ const InventoryRow = ({ item, vendors }) => {
            { time: currentTime, text: "AI triggered by low stock alert." },
            { time: currentTime, text: "WhatsApp draft generated and audited." }
         ],
-        final_message: data.message_to_send,
-        status: 'pending' // Approvals page looks for 'pending' quotes
+        status: 'pending' 
       };
       
       await addDoc(collection(db, "quotes"), newApprovalCard);
-      console.log("✅ Successfully saved to Firebase Quotes!");
-      // -----------------------------------------------------------
-
-      // 3. Stop the animation and lock in the success UI
+      
       clearInterval(uiInterval);
       setReasoningStep(AI_REASONING_STEPS.length - 1);
       setSourcingState('done');
       
     } catch (error) {
-      console.error("❌ API Connection Failed. Is the Uvicorn server running?", error);
+      console.error("AI Sourcing Error:", error);
       clearInterval(uiInterval);
       setSourcingState('idle'); 
     }
@@ -130,16 +117,16 @@ const InventoryRow = ({ item, vendors }) => {
         <td className="py-5 px-6">
           <div className="flex items-center gap-2">
             <TrendingDown size={14} className="text-cura-grey dark:text-gray-500" />
-            <span className="text-sm font-semibold dark:text-gray-200">{item.consumption} {item.unit}/day</span>
+            <span className="text-sm font-semibold dark:text-gray-200">{consumption} {item.unit}/day</span>
           </div>
         </td>
         <td className="py-5 px-6">
           <span className={`px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 w-max ${
-            item.status === 'critical' ? 'bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400' :
-            item.status === 'warning' ? 'bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400' :
+            derivedStatus === 'critical' ? 'bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400' :
+            derivedStatus === 'warning' ? 'bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400' :
             'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400'
           }`}>
-            {item.status === 'critical' ? <AlertCircle size={12} /> : <Clock size={12} />}
+            {derivedStatus === 'critical' ? <AlertCircle size={12} /> : <Clock size={12} />}
             {daysLeft} days left
           </span>
         </td>
@@ -153,12 +140,10 @@ const InventoryRow = ({ item, vendors }) => {
         </td>
       </tr>
 
-      {/* Expanded Details Row */}
       {isExpanded && (
         <tr className="bg-gray-50/30 dark:bg-gray-800/20 border-b border-gray-50 dark:border-gray-800">
           <td colSpan="5" className="p-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              {/* Left: Trend Graph */}
               <div className="bg-white dark:bg-gray-900 p-5 rounded-[2rem] border border-gray-100 dark:border-gray-800 shadow-sm">
                 <h4 className="text-xs font-bold text-cura-grey dark:text-gray-400 uppercase tracking-wider mb-4">Consumption Trend</h4>
                 <div className="h-32 w-full">
@@ -175,19 +160,12 @@ const InventoryRow = ({ item, vendors }) => {
                         contentStyle={{ borderRadius: '1rem', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
                         cursor={{ stroke: '#f3f4f6', strokeWidth: 2 }}
                       />
-                      <Area 
-                        type="monotone" 
-                        dataKey="val" 
-                        stroke="#17439B" 
-                        strokeWidth={3}
-                        fill={`url(#gradient-${item.id})`} 
-                      />
+                      <Area type="monotone" dataKey="val" stroke="#17439B" strokeWidth={3} fill={`url(#gradient-${item.id})`} />
                     </AreaChart>
                   </ResponsiveContainer>
                 </div>
               </div>
 
-              {/* Right: AI Action Panel */}
               <div className="flex flex-col justify-center">
                 <div className="bg-blue-50/50 dark:bg-cura-blue/10 rounded-[2rem] p-6 border border-blue-100 dark:border-cura-blue/20">
                   <div className="flex items-start gap-4">
@@ -252,91 +230,29 @@ const Inventory = () => {
   const [activeTab, setActiveTab] = useState('All');
   const tabs = ['All', 'Food', 'Medical', 'Education', 'Hygiene'];
 
-  // 1. STATE FOR LIVE DATA & FILTERS
   const [inventoryData, setInventoryData] = useState([]);
   const [vendors, setVendors] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [isFilterOpen, setIsFilterOpen] = useState(false);
-  const [sortBy, setSortBy] = useState('name'); // 'name', 'stockLow', 'stockHigh'
+  const [sortBy, setSortBy] = useState('name'); 
 
-  // Modal State
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     name: '', category: 'Food', stock: '', unit: 'kg', consumption: ''
   });
   
-  // CSV Upload State & Ref
   const fileInputRef = useRef(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadStats, setUploadStats] = useState({ total: 0, current: 0 });
   
-  const handleFileUpload = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    setIsUploading(true);
-
-    Papa.parse(file, {
-      header: true,
-      skipEmptyLines: true,
-      complete: async (results) => {
-        const rows = results.data;
-        setUploadStats({ total: rows.length, current: 0 });
-        let newItems = [];
-
-        for (let i = 0; i < rows.length; i++) {
-          const row = rows[i];
-          try {
-            const newItem = {
-              name: row.name || 'Unnamed Item',
-              category: row.category || 'Other',
-              stock: Number(row.stock) || 0,
-              unit: row.unit || 'units',
-              daily_consumption: Number(row.consumption) || 1,
-              reorder_threshold: Number(row.threshold) || 20,
-              last_updated: serverTimestamp(),
-              trend: []
-            };
-
-            const docRef = await addDoc(collection(db, "inventory"), newItem);
-            newItems.push({ id: docRef.id, ...newItem });
-            
-            setUploadStats(prev => ({ ...prev, current: i + 1 }));
-          } catch (err) {
-            console.error("Error uploading row:", err);
-          }
-        }
-
-        setInventoryData(prev => [...newItems, ...prev]);
-        setIsUploading(false);
-        if(fileInputRef.current) fileInputRef.current.value = '';
-      },
-      error: (error) => {
-        console.error("Error parsing CSV:", error);
-        setIsUploading(false);
-        alert("Failed to parse CSV file.");
-      }
-    });
-  };
-
+  // Real-time Listeners
   useEffect(() => {
-    // 1. Live listener for Inventory
     const unsubInv = onSnapshot(collection(db, "inventory"), (snapshot) => {
-      const items = snapshot.docs.map(doc => {
-        const data = doc.data();
-        // Logic: Status is now derived from the 'reorder_threshold' in DB
-        let derivedStatus = 'healthy';
-        if (data.stock <= (data.reorder_threshold || 10)) derivedStatus = 'critical';
-        else if (data.stock <= ((data.reorder_threshold || 10) * 1.5)) derivedStatus = 'warning';
-        
-        return { id: doc.id, ...data, status: derivedStatus };
-      });
-      setInventoryData(items);
+      setInventoryData(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
     });
 
-    // 2. Live listener for Vendors (to pass to AI Agent)
     const unsubVendors = onSnapshot(collection(db, "vendors"), (snapshot) => {
       setVendors(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
       setLoading(false);
@@ -354,13 +270,14 @@ const Inventory = () => {
         category: formData.category,
         stock: Number(formData.stock),
         unit: formData.unit,
-        consumption: Number(formData.consumption),
+        daily_consumption: Number(formData.consumption) || 1, 
+        reorder_threshold: 20, 
         status: 'healthy', 
-        trend: [] 
+        trend: [],
+        last_updated: serverTimestamp()
       };
 
-      const docRef = await addDoc(collection(db, "inventory"), newItem);
-      setInventoryData([...inventoryData, { id: docRef.id, ...newItem }]);
+      await addDoc(collection(db, "inventory"), newItem);
       
       setFormData({ name: '', category: 'Food', stock: '', unit: 'kg', consumption: '' });
       setIsAddModalOpen(false);
@@ -371,7 +288,40 @@ const Inventory = () => {
     }
   };
 
-  // --- 2. FILTER & SORT LOGIC ---
+  const handleFileUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setIsUploading(true);
+
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: async (results) => {
+        const rows = results.data;
+        setUploadStats({ total: rows.length, current: 0 });
+
+        for (let i = 0; i < rows.length; i++) {
+          const row = rows[i];
+          try {
+            const newItem = {
+              name: row.name || 'Unnamed Item',
+              category: row.category || 'Other',
+              stock: Number(row.stock) || 0,
+              unit: row.unit || 'units',
+              daily_consumption: Number(row.consumption) || 1,
+              reorder_threshold: Number(row.threshold) || 20,
+              last_updated: serverTimestamp(),
+              trend: []
+            };
+            await addDoc(collection(db, "inventory"), newItem);
+            setUploadStats(prev => ({ ...prev, current: i + 1 }));
+          } catch (err) { console.error(err); }
+        }
+        setIsUploading(false);
+      }
+    });
+  };
+
   const displayedData = inventoryData
     .filter(item => {
       const matchesTab = activeTab === 'All' || item.category === activeTab;
@@ -397,8 +347,6 @@ const Inventory = () => {
 
   return (
     <div className="w-full min-h-screen bg-transparent p-8 font-jost text-cura-dark dark:text-gray-100 flex flex-col gap-8">
-      
-      {/* Header & Controls */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h2 className="text-2xl font-bold tracking-tight">Resource Inventory</h2>
@@ -406,90 +354,57 @@ const Inventory = () => {
         </div>
         
         <div className="flex items-center gap-3 w-full md:w-auto">
-          {/* Active Search Bar */}
           <div className="relative flex-1 md:w-64">
-            <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
+            <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
             <input 
               type="text" 
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="Search items..." 
-              className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl text-sm focus:outline-none focus:border-cura-blue focus:ring-1 focus:ring-cura-blue transition-all dark:text-white"
+              className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl text-sm focus:outline-none dark:text-white"
             />
           </div>
           
-          {/* Active Filter Dropdown */}
           <div className="relative">
-            <button 
-              onClick={() => setIsFilterOpen(!isFilterOpen)}
-              className="p-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl text-cura-dark dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-            >
+            <button onClick={() => setIsFilterOpen(!isFilterOpen)} className="p-2.5 bg-white dark:bg-gray-900 border border-gray-200 rounded-2xl">
               <Filter size={18} />
             </button>
-            
             {isFilterOpen && (
-              <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-xl shadow-lg z-10 overflow-hidden animate-in fade-in slide-in-from-top-2">
-                <div className="p-2 space-y-1">
-                  <p className="text-[10px] uppercase font-bold text-gray-400 px-3 pt-1 pb-2">Sort By</p>
-                  <button onClick={() => { setSortBy('name'); setIsFilterOpen(false); }} className={`w-full text-left px-3 py-2 text-sm font-semibold rounded-lg ${sortBy === 'name' ? 'bg-blue-50 text-cura-blue dark:bg-blue-900/30 dark:text-blue-400' : 'hover:bg-gray-50 dark:hover:bg-gray-800 text-cura-dark dark:text-gray-200'}`}>A-Z (Name)</button>
-                  <button onClick={() => { setSortBy('stockLow'); setIsFilterOpen(false); }} className={`w-full text-left px-3 py-2 text-sm font-semibold rounded-lg ${sortBy === 'stockLow' ? 'bg-blue-50 text-cura-blue dark:bg-blue-900/30 dark:text-blue-400' : 'hover:bg-gray-50 dark:hover:bg-gray-800 text-cura-dark dark:text-gray-200'}`}>Stock: Low to High</button>
-                  <button onClick={() => { setSortBy('stockHigh'); setIsFilterOpen(false); }} className={`w-full text-left px-3 py-2 text-sm font-semibold rounded-lg ${sortBy === 'stockHigh' ? 'bg-blue-50 text-cura-blue dark:bg-blue-900/30 dark:text-blue-400' : 'hover:bg-gray-50 dark:hover:bg-gray-800 text-cura-dark dark:text-gray-200'}`}>Stock: High to Low</button>
-                </div>
+              <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-900 border rounded-xl shadow-lg z-10 p-2">
+                <button onClick={() => { setSortBy('name'); setIsFilterOpen(false); }} className="w-full text-left p-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg">Name (A-Z)</button>
+                <button onClick={() => { setSortBy('stockLow'); setIsFilterOpen(false); }} className="w-full text-left p-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg">Stock Low to High</button>
               </div>
             )}
           </div>
 
-          <input 
-            type="file" 
-            accept=".csv" 
-            ref={fileInputRef} 
-            onChange={handleFileUpload} 
-            className="hidden" 
-          />
-          <button 
-            onClick={() => fileInputRef.current.click()}
-            className="flex items-center gap-2 px-5 py-2.5 text-sm font-bold text-cura-dark dark:text-gray-200 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-all shadow-sm"
-          >
-            <Upload size={18} /> Upload CSV
-          </button>
-
-          <button 
-            onClick={() => setIsAddModalOpen(true)}
-            className="flex items-center gap-2 px-5 py-2.5 text-sm font-bold text-white bg-cura-dark dark:bg-cura-blue rounded-xl hover:bg-black dark:hover:bg-blue-600 transition-all shadow-md"
-          >
-            <Plus size={18} /> Add Resource
-          </button>
+          <input type="file" accept=".csv" ref={fileInputRef} onChange={handleFileUpload} className="hidden" />
+          <button onClick={() => fileInputRef.current.click()} className="flex items-center gap-2 px-5 py-2.5 text-sm font-bold bg-white dark:bg-gray-800 border rounded-xl shadow-sm"><Upload size={18} /> CSV</button>
+          <button onClick={() => setIsAddModalOpen(true)} className="flex items-center gap-2 px-5 py-2.5 text-sm font-bold text-white bg-cura-dark dark:bg-cura-blue rounded-xl shadow-md"><Plus size={18} /> Add</button>
         </div>
       </div>
 
-      {/* Tabs */}
       <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
         {tabs.map(tab => (
           <button 
             key={tab}
             onClick={() => setActiveTab(tab)}
-            className={`px-5 py-2 rounded-full text-sm font-bold whitespace-nowrap transition-all ${
-              activeTab === tab 
-                ? 'bg-cura-dark dark:bg-cura-blue text-white shadow-md' 
-                : 'bg-white dark:bg-gray-900 text-cura-grey dark:text-gray-400 border border-gray-200 dark:border-gray-800 hover:border-gray-300 dark:hover:border-gray-700'
-            }`}
+            className={`px-5 py-2 rounded-full text-sm font-bold transition-all ${activeTab === tab ? 'bg-cura-dark dark:bg-cura-blue text-white shadow-md' : 'bg-white dark:bg-gray-900 text-cura-grey dark:text-gray-400 border border-gray-200 dark:border-gray-800 hover:border-gray-300 dark:hover:border-gray-700'}`}
           >
             {tab}
           </button>
         ))}
       </div>
 
-      {/* Main Table Card */}
-      <div className="bg-white dark:bg-gray-900 rounded-[2.5rem] shadow-sm shadow-gray-100/50 dark:shadow-none border border-gray-100 dark:border-gray-800 overflow-hidden">
+      <div className="bg-white dark:bg-gray-900 rounded-[2.5rem] shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left">
-            <thead className="bg-gray-50/50 dark:bg-gray-800/50 text-[10px] uppercase tracking-wider text-cura-grey dark:text-gray-400 font-bold border-b border-transparent dark:border-gray-800">
+            <thead className="bg-gray-50/50 dark:bg-gray-800/50 text-[10px] uppercase font-bold text-gray-400 border-b dark:border-gray-800">
               <tr>
-                <th className="py-4 px-6 rounded-tl-[2.5rem]">Item & Category</th>
+                <th className="py-4 px-6">Item & Category</th>
                 <th className="py-4 px-6">Current Stock</th>
                 <th className="py-4 px-6">Est. Consumption</th>
-                <th className="py-4 px-6">Predicted Stockout</th>
-                <th className="py-4 px-6 text-right rounded-tr-[2.5rem]">Actions</th>
+                <th className="py-4 px-6">Status</th>
+                <th className="py-4 px-6 text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -498,61 +413,56 @@ const Inventory = () => {
               ))}
             </tbody>
           </table>
-          
-          {/* Empty State */}
           {displayedData.length === 0 && (
-             <div className="p-12 flex flex-col items-center justify-center text-center">
-                <Search size={32} className="text-gray-300 dark:text-gray-600 mb-4" />
-                <p className="text-cura-dark dark:text-gray-300 font-bold text-lg">No items found</p>
-                <p className="text-sm text-cura-grey dark:text-gray-500 mt-1">Try adjusting your search or category filter.</p>
+             <div className="p-12 text-center">
+                <Search size={32} className="mx-auto mb-4 text-gray-300" />
+                <p className="font-bold text-lg">No items found</p>
              </div>
           )}
         </div>
       </div>
 
-      {/* Secondary Section: Reorder History */}
       <div>
         <div className="flex items-center gap-2 mb-4 px-2">
-          <History size={18} className="text-cura-grey dark:text-gray-400" />
-          <h3 className="font-bold text-lg dark:text-gray-100">Recent Purchase Orders</h3>
+          <History size={18} className="text-gray-400" />
+          <h3 className="font-bold text-lg">Recent Purchase Orders</h3>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {reorderHistory.map((po) => (
-            <div key={po.id} className="bg-white dark:bg-gray-900 p-5 rounded-[2rem] border border-gray-100 dark:border-gray-800 flex flex-col gap-3">
+            <div key={po.id} className="bg-white dark:bg-gray-900 p-5 rounded-[2rem] border dark:border-gray-800 flex flex-col gap-3">
               <div className="flex justify-between items-start">
                 <span className="text-xs font-bold text-cura-blue bg-blue-50 dark:bg-cura-blue/10 px-2 py-1 rounded-md">{po.id}</span>
-                <span className="text-[10px] text-cura-grey dark:text-gray-500 font-bold uppercase tracking-wider">{po.date}</span>
+                <span className="text-[10px] text-gray-400 font-bold uppercase">{po.date}</span>
               </div>
               <div>
-                <p className="font-bold text-cura-dark dark:text-gray-100">{po.item}</p>
-                <p className="text-sm text-cura-grey dark:text-gray-400">{po.qty} • {po.vendor}</p>
+                <p className="font-bold">{po.item}</p>
+                <p className="text-sm text-gray-400">{po.qty} • {po.vendor}</p>
               </div>
             </div>
           ))}
         </div>
       </div>
       
-      {/* ADD ITEM MODAL */}
       {isAddModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 dark:bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="bg-white dark:bg-gray-900 w-full max-w-md rounded-[2rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
-            <div className="p-6 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center bg-gray-50/50 dark:bg-gray-800/30">
+            <div className="p-6 border-b dark:border-gray-800 flex justify-between items-center bg-gray-50/50 dark:bg-gray-800/30">
               <div>
-                <h3 className="font-bold text-lg text-cura-dark dark:text-gray-100">Add New Resource</h3>
-                <p className="text-xs text-cura-grey dark:text-gray-400 font-medium">Log a new item into your Firebase inventory.</p>
+                <h3 className="font-bold text-lg">Add New Resource</h3>
+                <p className="text-xs text-gray-400 font-medium">Log a new item into your Firebase inventory.</p>
               </div>
-              <button onClick={() => setIsAddModalOpen(false)} className="p-2 text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors">
+              <button onClick={() => setIsAddModalOpen(false)} className="p-2 text-gray-400 hover:bg-gray-100 rounded-full">
                 <X size={20} />
               </button>
             </div>
             <form onSubmit={handleAddItem} className="p-6 space-y-4">
               <div className="space-y-1">
-                <label className="text-xs font-bold uppercase text-cura-grey dark:text-gray-400">Item Name</label>
-                <input required type="text" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-cura-dark dark:text-gray-200 text-sm font-bold rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-cura-blue/30" placeholder="e.g., Apple Juice" />
+                <label className="text-xs font-bold uppercase text-gray-400">Item Name</label>
+                <input required type="text" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full bg-gray-50 dark:bg-gray-800 border dark:border-gray-700 text-sm font-bold rounded-xl px-4 py-3" placeholder="e.g., Apple Juice" />
               </div>
               <div className="space-y-1">
-                <label className="text-xs font-bold uppercase text-cura-grey dark:text-gray-400">Category</label>
-                <select value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})} className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-cura-dark dark:text-gray-200 text-sm font-bold rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-cura-blue/30">
+                <label className="text-xs font-bold uppercase text-gray-400">Category</label>
+                <select value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})} className="w-full bg-gray-50 dark:bg-gray-800 border dark:border-gray-700 text-sm font-bold rounded-xl px-4 py-3">
                   <option>Food</option>
                   <option>Medical</option>
                   <option>Education</option>
@@ -561,39 +471,37 @@ const Inventory = () => {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <label className="text-xs font-bold uppercase text-cura-grey dark:text-gray-400">Initial Stock</label>
-                  <input required type="number" value={formData.stock} onChange={e => setFormData({...formData, stock: e.target.value})} className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-cura-dark dark:text-gray-200 text-sm font-bold rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-cura-blue/30" placeholder="e.g., 50" />
+                  <label className="text-xs font-bold uppercase text-gray-400">Initial Stock</label>
+                  <input required type="number" value={formData.stock} onChange={e => setFormData({...formData, stock: e.target.value})} className="w-full bg-gray-50 dark:bg-gray-800 border dark:border-gray-700 text-sm font-bold rounded-xl px-4 py-3" placeholder="e.g., 50" />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-xs font-bold uppercase text-cura-grey dark:text-gray-400">Unit Type</label>
-                  <input required type="text" value={formData.unit} onChange={e => setFormData({...formData, unit: e.target.value})} className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-cura-dark dark:text-gray-200 text-sm font-bold rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-cura-blue/30" placeholder="kg, boxes, L..." />
+                  <label className="text-xs font-bold uppercase text-gray-400">Unit Type</label>
+                  <input required type="text" value={formData.unit} onChange={e => setFormData({...formData, unit: e.target.value})} className="w-full bg-gray-50 dark:bg-gray-800 border dark:border-gray-700 text-sm font-bold rounded-xl px-4 py-3" placeholder="kg, boxes, L..." />
                 </div>
               </div>
               <div className="space-y-1">
-                <label className="text-xs font-bold uppercase text-cura-grey dark:text-gray-400">Est. Daily Consumption</label>
-                <input required type="number" value={formData.consumption} onChange={e => setFormData({...formData, consumption: e.target.value})} className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-cura-dark dark:text-gray-200 text-sm font-bold rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-cura-blue/30" placeholder="e.g., 2" />
+                <label className="text-xs font-bold uppercase text-gray-400">Est. Daily Consumption</label>
+                <input required type="number" value={formData.consumption} onChange={e => setFormData({...formData, consumption: e.target.value})} className="w-full bg-gray-50 dark:bg-gray-800 border dark:border-gray-700 text-sm font-bold rounded-xl px-4 py-3" placeholder="e.g., 2" />
               </div>
-              <button type="submit" disabled={isSubmitting} className="w-full mt-4 py-3.5 bg-cura-dark dark:bg-cura-blue text-white font-bold rounded-xl hover:bg-black dark:hover:bg-blue-600 transition-colors shadow-lg disabled:opacity-50">
-                {isSubmitting ? 'Saving to Database...' : 'Save Resource'}
+              <button type="submit" disabled={isSubmitting} className="w-full mt-4 py-3.5 bg-cura-dark dark:bg-cura-blue text-white font-bold rounded-xl hover:bg-black dark:hover:bg-blue-600 shadow-lg disabled:opacity-50">
+                {isSubmitting ? 'Saving...' : 'Save Resource'}
               </button>
             </form>
           </div>
         </div>
       )}
 
-      {/* CSV UPLOADING OVERLAY */}
       {isUploading && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-white/80 dark:bg-gray-950/80 backdrop-blur-sm animate-in fade-in duration-200">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-white/80 dark:bg-gray-950/80 backdrop-blur-sm animate-in fade-in">
           <div className="flex flex-col items-center gap-4">
             <div className="w-16 h-16 border-4 border-cura-blue/20 border-t-cura-blue rounded-full animate-spin"></div>
-            <h3 className="text-xl font-bold text-cura-dark dark:text-gray-100">Processing CSV...</h3>
-            <p className="text-sm font-bold text-cura-grey dark:text-gray-400 bg-white dark:bg-gray-900 px-4 py-2 rounded-full shadow-sm border border-gray-100 dark:border-gray-800">
+            <h3 className="text-xl font-bold">Processing CSV...</h3>
+            <p className="text-sm font-bold bg-white dark:bg-gray-900 px-4 py-2 rounded-full border">
               Uploaded {uploadStats.current} of {uploadStats.total} items
             </p>
           </div>
         </div>
       )}
-
     </div>
   );
 };

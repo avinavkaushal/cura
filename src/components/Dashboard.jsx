@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { collection, onSnapshot, query, where, orderBy, limit } from "firebase/firestore"; 
 import { db } from "../firebase";
@@ -11,7 +11,6 @@ import {
   ShieldCheck, Tag, Server, Zap, FileText, Plus, Activity, AlertCircle, Bot
 } from 'lucide-react';
 
-// Helper to map DB agents to your existing Lucide icons
 const getAgentIcon = (agent) => {
   if (agent === 'Finance Agent') return ShieldCheck;
   if (agent === 'Procurement Agent') return Tag;
@@ -60,6 +59,34 @@ const Dashboard = () => {
   const [unverifiedCount, setUnverifiedCount] = useState(0);
   const [pendingApprovalsCount, setPendingApprovalsCount] = useState(0); 
   const [activityFeed, setActivityFeed] = useState([]);
+  const [transactions, setTransactions] = useState([]);
+
+  const monthlyData = useMemo(() => {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const chartMap = {};
+
+    // Initialize current year months
+    months.forEach(m => chartMap[m] = 0);
+
+    // Group real transactions by month
+    transactions.forEach(tx => {
+      if (tx.type === 'Inflow' && tx.date) {
+        // Support both "DD MMM YYYY" and "DD/MM/YYYY" formats
+        let monthName;
+        if (tx.date.includes('/')) {
+          monthName = months[parseInt(tx.date.split('/')[1], 10) - 1];
+        } else {
+          monthName = tx.date.split(' ')[1]; 
+        }
+        
+        if (chartMap[monthName] !== undefined) {
+          chartMap[monthName] += Number(tx.amount || 0);
+        }
+      }
+    });
+
+    return months.map(name => ({ name, value: chartMap[name] }));
+  }, [transactions]);
 
   // FETCH & CALCULATE LIVE DATA USING onSnapshot
   useEffect(() => {
@@ -79,12 +106,15 @@ const Dashboard = () => {
       let totalInflow = 0;
       let totalOutflow = 0;
       let unverified = 0;
+      const txs = [];
       snapshot.docs.forEach(doc => {
         const tx = doc.data();
+        txs.push(tx);
         if (tx.type === 'Inflow') totalInflow += Number(tx.amount || 0);
         else totalOutflow += Number(tx.amount || 0);
         if (['Pending Review', 'Not Uploaded', 'Mismatch'].includes(tx.status)) unverified++;
       });
+      setTransactions(txs);
       setTotalDonations(totalInflow);
       setFundsDisbursed(totalOutflow);
       setUnverifiedCount(unverified);
@@ -133,7 +163,6 @@ const Dashboard = () => {
   return (
     <div className="w-full min-h-screen bg-transparent p-8 font-jost text-cura-dark dark:text-gray-100 flex flex-col gap-8">
       
-      {/* Needs Attention Center */}
       <section className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {alertData.map((alert) => (
           <div key={alert.id} className={`${alert.bg} ${alert.border} border p-5 rounded-2xl flex items-center justify-between transition-all hover:scale-[1.02] shadow-sm dark:shadow-none`}>
@@ -154,7 +183,6 @@ const Dashboard = () => {
       </section>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
-        {/* MAIN CONTENT */}
         <div className="lg:col-span-2 space-y-8 flex flex-col h-full">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {statData.map((stat, idx) => (
@@ -176,12 +204,12 @@ const Dashboard = () => {
             
             <div className="flex-1 w-full relative">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={[ { name: 'Jan', value: 4000 }, { name: 'Feb', value: 3000 }, { name: 'Mar', value: 5000 }, { name: 'Apr', value: 2780 }, { name: 'May', value: 6890 } ]} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
+                <BarChart data={monthlyData} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
                   <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#83868E', fontWeight: 600 }} dy={10} />
                   <Tooltip content={<CustomTooltip />} cursor={{ fill: 'currentColor', opacity: 0.05, radius: [20, 20, 20, 20] }} />
                   <Bar dataKey="value" radius={[20, 20, 20, 20]} barSize={48}>
-                    {[1,2,3,4,5].map((_, index) => (
-                      <Cell key={index} fill={index === 4 ? '#17439B' : '#17439B20'} className="transition-all duration-300 hover:opacity-80" />
+                    {monthlyData.map((entry, index) => (
+                      <Cell key={index} fill={entry.value > 0 ? '#17439B' : '#17439B20'} className="transition-all duration-300 hover:opacity-80" />
                     ))}
                   </Bar>
                 </BarChart>
@@ -190,7 +218,7 @@ const Dashboard = () => {
           </div>
         </div>
 
-        {/* RIGHT SIDEBAR (Live Feed) */}
+        {/* RIGHT SIDEBAR */}
         <div className="lg:col-span-1 space-y-8 flex flex-col h-full">
           <div className="bg-white dark:bg-gray-900 p-8 rounded-[2.5rem] shadow-sm shadow-gray-100/50 dark:shadow-none border border-gray-100 dark:border-gray-800 flex-1 flex flex-col">
             <div className="flex justify-between items-center mb-6">

@@ -54,7 +54,7 @@ const Sidebar = ({ activeTab, badges }) => {
     <aside
       className={`${
         expanded ? 'w-64' : 'w-20'
-      } bg-white dark:bg-gray-950 border-r border-gray-100 dark:border-gray-800 flex flex-col py-6 transition-all duration-300 ease-in-out min-h-screen relative z-40`}
+      } bg-white dark:bg-gray-950 border-r border-gray-100 dark:border-gray-800 flex flex-col py-6 transition-all duration-300 ease-in-out h-screen sticky top-0 z-40`}
     >
       {/* Logo / Toggle */}
       <div className="px-4 mb-8 flex justify-center">

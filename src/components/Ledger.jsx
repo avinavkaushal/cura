@@ -60,11 +60,10 @@ export default function Ledger() {
   const [filterCategory, setFilterCategory] = useState('All Categories');
   const [filterStatus, setFilterStatus] = useState('All Statuses');
   
-  // Modal States
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [selectedAllocation, setSelectedAllocation] = useState(null); // For Allocate Modal
-  const [selectedTransaction, setSelectedTransaction] = useState(null); // For Details Modal
+  const [selectedAllocation, setSelectedAllocation] = useState(null); 
+  const [selectedTransaction, setSelectedTransaction] = useState(null); 
 
   const [reportFormat, setReportFormat] = useState('pdf');
   const [reportFY, setReportFY] = useState('FY 2023-24');
@@ -106,11 +105,10 @@ const handleAllocateFunds = async (e) => {
   e.preventDefault();
   setIsSubmitting(true);
   try {
-    // 1. Create a real transaction entry linked to the donor
     await addDoc(collection(db, "transactions"), {
       donor: selectedAllocation.donor,
       amount: Number(selectedAllocation.amount),
-      category: "Allocated Donation", // You can pull this from a dropdown state
+      category: "Allocated Donation", 
       type: "Inflow",
       date: new Date().toLocaleDateString('en-GB'),
       status: 'Allocated'
@@ -138,9 +136,8 @@ useEffect(() => {
     setPendingPools(snap.docs.map(d => ({ id: d.id, ...d.data() })));
   });
 
-  // 3. Live listener for the Donor CRM (for PAN details)
   const unsubDonors = onSnapshot(collection(db, "donors"), (snap) => {
-    setDonors(snap.docs.map(d => ({ id: d.id, ...d.data() }))); // Make sure you have [donors, setDonors] = useState([]);
+    setDonors(snap.docs.map(d => ({ id: d.id, ...d.data() }))); 
     setLoading(false);
   });
 
