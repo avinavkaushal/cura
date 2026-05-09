@@ -1,0 +1,13 @@
+* [33mb6bab7a[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mbackend-db-setup[m[33m, [m[1;31morigin/backend-db-setup[m[33m)[m fix: final firebase
+* [33m9e78331[m feat: integrated firebase
+*   [33mc791981[m Merge branch 'main' of https://github.com/avinavkaushal/cura into backend-db-setup
+[32m|[m[33m\[m  
+[32m|[m * [33m62d0171[m[33m ([m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m fix: added CORS middleware for frontend integration
+[32m|[m * [33m0134216[m wireframe of the agentic workflow
+[32m|[m *   [33mdfc304c[m Merge branch 'aayush/agentic_core'
+[32m|[m [34m|[m[35m\[m  
+[32m|[m [34m|[m * [33me039695[m chore: updated gitignore
+[32m|[m [34m|[m * [33ma411485[m feat: integrated local gemma swarm and pywhatkit automation
+[32m|[m * [35m|[m [33mae1be86[m revamping UI/UX as whole
+[32m|[m [35m|[m[35m/[m  
+[32m|[m * [33ma8d466d[m revamped the ledger page.
