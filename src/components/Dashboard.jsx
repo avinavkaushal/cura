@@ -124,9 +124,9 @@ const Dashboard = () => {
 
   // DYNAMIC STAT CARDS BASED ON LIVE DATA
   const statData = [
-    { title: 'Total Donations', value: `₹${totalDonations.toLocaleString()}`, trend: 'Live from Firebase', chart: [30, 45, 20, 60, 40, 80, 50] },
+    { title: 'Total Donations', value: `₹${totalDonations.toLocaleString()}`, trend: 'Live', chart: [30, 45, 20, 60, 40, 80, 50] },
     { title: 'Active Needs', value: lowStockCount.toString(), trend: 'High priority items', chart: [10, 15, 12, 8, 14, 12, 12] },
-    { title: 'Funds Disbursed', value: `₹${fundsDisbursed.toLocaleString()}`, trend: 'Live from Firebase', chart: [20, 30, 50, 40, 60, 45, 70] },
+    { title: 'Funds Disbursed', value: `₹${fundsDisbursed.toLocaleString()}`, trend: 'Live', chart: [20, 30, 50, 40, 60, 45, 70] },
   ];
 
   if (loading) {
@@ -225,11 +225,8 @@ const Dashboard = () => {
             <div className="flex justify-between items-center mb-6">
               <h3 className="font-bold text-lg flex items-center gap-2 text-cura-dark dark:text-gray-100">
                 <Activity size={18} className="text-cura-blue dark:text-blue-400" />
-                Live Agent Activity
+                Recent Activity
               </h3>
-              <div className="flex items-center gap-1 text-[10px] font-bold text-emerald-500 uppercase tracking-wider bg-emerald-50 dark:bg-emerald-500/10 px-2 py-1 rounded-md">
-                <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></div> Online
-              </div>
             </div>
             
             <div className="relative pl-3 space-y-6 flex-1">
