@@ -12,10 +12,10 @@ import {
   LogOut, 
   MoreVertical,
   ChevronRight,
-  Sun,   // Added for theme toggle
-  Moon   // Added for theme toggle
+  Sun,   
+  Moon   
 } from 'lucide-react';
-import { useTheme } from '../context/ThemeContext'; // Import our new hook
+import { useTheme } from '../context/ThemeContext'; 
 import { useAuth } from '../context/AuthContext';
 import { auth } from '../firebase';
 import { signOut } from 'firebase/auth';
@@ -24,12 +24,12 @@ const Sidebar = ({ activeTab, badges }) => {
   const [expanded, setExpanded] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const profileRef = useRef(null);
-  const { theme, toggleTheme } = useTheme(); // Consume the theme context
-  const { currentUser, userData } = useAuth(); // Consume the auth context
+  const { theme, toggleTheme } = useTheme(); 
+  const { currentUser, userData } = useAuth(); 
 
-  // Helper: Generate initials from name (e.g., "Aarav Sharma" -> "AS")
+
   const getInitials = (name) => {
-    if (!name) return 'U'; // Default if name isn't loaded
+    if (!name) return 'U'; // default
     const names = name.split(' ');
     let initials = names[0].substring(0, 1).toUpperCase();
     if (names.length > 1) {

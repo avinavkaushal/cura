@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { auth, db } from '../firebase'; // Adjust path if needed
+import { auth, db } from '../firebase'; 
 import { onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 
@@ -11,11 +11,10 @@ export function useAuth() {
 
 export function AuthProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(null);
-  const [userData, setUserData] = useState(null); // This holds the personalized name, etc.
+  const [userData, setUserData] = useState(null); 
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Listen for Firebase Auth state changes
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
         // 1. User is logged in, set the basic auth user
@@ -32,19 +31,18 @@ export function AuthProvider({ children }) {
           setUserData(null);
         }
       } else {
-        // User is logged out
         setCurrentUser(null);
         setUserData(null);
       }
-      setLoading(false); // Done checking auth and fetching data
+      setLoading(false); 
     });
 
-    return unsubscribe; // Cleanup the listener on unmount
+    return unsubscribe; 
   }, []);
 
   const value = {
     currentUser,
-    userData, // { name: 'Aarav Sharma', orphanage_name: 'Hope Center', etc. }
+    userData,
   };
 
   return (
