@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { collection, getDocs } from "firebase/firestore";
+import { collection, getDocs, addDoc } from "firebase/firestore";
 import { db } from "../firebase";
 
 import { 
@@ -8,7 +8,7 @@ import {
 import { 
   Search, Filter, Download, FileText, Printer, ChevronDown, 
   ArrowUpRight, ArrowDownRight, Clock, CheckCircle2, AlertCircle, 
-  FileCheck, Calendar, MoreHorizontal, X
+  FileCheck, Calendar, MoreHorizontal, X, Plus
 } from 'lucide-react';
 
 // --- Hardcoded Data for charts & pools (We will make these dynamic later!) ---
@@ -61,6 +61,46 @@ export default function Ledger() {
   const [activeView, setActiveView] = useState('Monthly');
   const [reportFormat, setReportFormat] = useState('pdf');
   const [reportFY, setReportFY] = useState('FY 2023-24');
+
+  // Transaction Modal State
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [formData, setFormData] = useState({
+    date: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+    donor: '',
+    amount: '',
+    category: 'Education',
+    type: 'Inflow'
+  });
+
+  const handleAddTransaction = async (e) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    try {
+      const newTx = {
+        date: formData.date,
+        donor: formData.donor,
+        amount: Number(formData.amount),
+        category: formData.category,
+        type: formData.type,
+        status: 'Verified' // Manual entries are pre-verified
+      };
+
+      // Push to Firebase
+      const docRef = await addDoc(collection(db, "transactions"), newTx);
+      
+      // Add to the top of our local table instantly
+      setTransactions([{ id: docRef.id, ...newTx }, ...transactions]);
+      
+      // Clean up
+      setFormData({ ...formData, donor: '', amount: '' });
+      setIsAddModalOpen(false);
+      setIsSubmitting(false);
+    } catch (error) {
+      console.error("Error adding transaction:", error);
+      setIsSubmitting(false);
+    }
+  };
 
   // FETCH FROM FIREBASE
   useEffect(() => {
@@ -133,7 +173,14 @@ export default function Ledger() {
             onClick={() => setIsReportModalOpen(true)}
             className="flex items-center gap-2 px-5 py-2.5 text-sm font-bold text-white bg-cura-dark dark:bg-cura-blue rounded-xl hover:bg-black dark:hover:bg-blue-600 transition-all shadow-md hover:shadow-lg"
           >
-            <FileText size={18} /> Generate 80G Report
+            <FileText size={18} /> Generate Report
+          </button>
+          {/* NEW BUTTON */}
+          <button 
+            onClick={() => setIsAddModalOpen(true)}
+            className="flex items-center gap-2 px-5 py-2.5 text-sm font-bold text-white bg-emerald-600 dark:bg-emerald-500 rounded-xl hover:bg-emerald-700 dark:hover:bg-emerald-600 transition-all shadow-md hover:shadow-lg"
+          >
+            <Plus size={18} /> Log Transaction
           </button>
         </div>
       </div>
@@ -199,12 +246,12 @@ export default function Ledger() {
                     <tr key={tx.id} className="border-b border-gray-50 dark:border-gray-800/50 hover:bg-gray-50/50 dark:hover:bg-gray-800/30 transition-colors group">
                       <td className="py-4 px-6">
                         <div className="font-semibold text-cura-dark dark:text-gray-100">{tx.date}</div>
-                        <div className="text-[10px] font-mono text-cura-grey dark:text-gray-500">TXN-{tx.id.toString().substring(0,6)}</div>
+                        <div className="text-[10px] font-mono text-cura-grey dark:text-gray-500">TXN-{tx.id?.toString().substring(0,6)}</div>
                       </td>
                       <td className="py-4 px-6 font-bold text-cura-dark dark:text-gray-200">{tx.donor}</td>
                       <td className="py-4 px-6 text-cura-grey dark:text-gray-400 font-medium">{tx.category}</td>
                       <td className={`py-4 px-6 text-right font-bold ${tx.type === 'Inflow' ? 'text-green-600 dark:text-green-400' : 'text-cura-dark dark:text-gray-100'}`}>
-                        {tx.type === 'Inflow' ? '+' : '-'}₹{tx.amount.toLocaleString()}
+                        {tx.type === 'Inflow' ? '+' : '-'}₹{Number(tx.amount).toLocaleString()}
                       </td>
                       <td className="py-4 px-6">
                         <StatusBadge status={tx.status} />
@@ -264,7 +311,6 @@ export default function Ledger() {
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-bold text-lg flex items-center gap-2">
                 Pending Allocations
-                <span className="bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 text-[10px] px-2 py-0.5 rounded-full">Action Needed</span>
               </h3>
             </div>
             <p className="text-xs text-cura-grey dark:text-gray-400 mb-4">Funds received but not yet tied to a specific initiative or purchase order.</p>
@@ -394,6 +440,67 @@ export default function Ledger() {
         </div>
       )}
 
+      {/* --- ADD TRANSACTION MODAL --- */}
+      {isAddModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 dark:bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-gray-900 w-full max-w-md rounded-[2rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+            
+            {/* Modal Header */}
+            <div className="p-6 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center bg-gray-50/50 dark:bg-gray-800/30">
+              <div>
+                <h3 className="font-bold text-lg text-cura-dark dark:text-gray-100">Log Transaction</h3>
+                <p className="text-xs text-cura-grey dark:text-gray-400 font-medium">Record an inflow or outflow of funds.</p>
+              </div>
+              <button onClick={() => setIsAddModalOpen(false)} className="p-2 text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors">
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Modal Form */}
+            <form onSubmit={handleAddTransaction} className="p-6 space-y-4">
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold uppercase text-cura-grey dark:text-gray-400">Type</label>
+                  <select value={formData.type} onChange={e => setFormData({...formData, type: e.target.value})} className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-cura-dark dark:text-gray-200 text-sm font-bold rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-cura-blue/30">
+                    <option value="Inflow">Inflow (Donation)</option>
+                    <option value="Disbursement">Outflow (Expense)</option>
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-bold uppercase text-cura-grey dark:text-gray-400">Amount (₹)</label>
+                  <input required type="number" value={formData.amount} onChange={e => setFormData({...formData, amount: e.target.value})} className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-cura-dark dark:text-gray-200 text-sm font-bold rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-cura-blue/30" placeholder="e.g., 5000" />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-bold uppercase text-cura-grey dark:text-gray-400">Entity (Donor or Vendor)</label>
+                <input required type="text" value={formData.donor} onChange={e => setFormData({...formData, donor: e.target.value})} className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-cura-dark dark:text-gray-200 text-sm font-bold rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-cura-blue/30" placeholder="e.g., Aditi Sharma" />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold uppercase text-cura-grey dark:text-gray-400">Category</label>
+                  <select value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})} className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-cura-dark dark:text-gray-200 text-sm font-bold rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-cura-blue/30">
+                    <option>Education</option>
+                    <option>Healthcare</option>
+                    <option>Emergency Relief</option>
+                    <option>Food & Rations</option>
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-bold uppercase text-cura-grey dark:text-gray-400">Date</label>
+                  <input required type="text" value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-cura-dark dark:text-gray-200 text-sm font-bold rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-cura-blue/30" />
+                </div>
+              </div>
+
+              <button type="submit" disabled={isSubmitting} className="w-full mt-4 py-3.5 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-700 transition-colors shadow-lg disabled:opacity-50">
+                {isSubmitting ? 'Saving...' : 'Save Transaction'}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
