@@ -11,13 +11,17 @@ import {
   HelpCircle, 
   LogOut, 
   MoreVertical,
-  ChevronRight
+  ChevronRight,
+  Sun,   // Added for theme toggle
+  Moon   // Added for theme toggle
 } from 'lucide-react';
+import { useTheme } from '../context/ThemeContext'; // Import our new hook
 
 const Sidebar = ({ activeTab, badges }) => {
   const [expanded, setExpanded] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const profileRef = useRef(null);
+  const { theme, toggleTheme } = useTheme(); // Consume the theme context
 
   // Close profile menu when clicking outside
   useEffect(() => {
@@ -50,20 +54,20 @@ const Sidebar = ({ activeTab, badges }) => {
     <aside
       className={`${
         expanded ? 'w-64' : 'w-20'
-      } bg-white border-r border-gray-100 flex flex-col py-6 transition-all duration-300 ease-in-out min-h-screen relative z-40`}
+      } bg-white dark:bg-gray-950 border-r border-gray-100 dark:border-gray-800 flex flex-col py-6 transition-all duration-300 ease-in-out min-h-screen relative z-40`}
     >
       {/* Logo / Toggle */}
       <div className="px-4 mb-8 flex justify-center">
         <button
           onClick={() => setExpanded(!expanded)}
-          className={`flex items-center gap-3 w-full p-2 rounded-xl hover:bg-gray-50 transition-colors ${expanded ? 'justify-start px-4' : 'justify-center'}`}
+          className={`flex items-center gap-3 w-full p-2 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors ${expanded ? 'justify-start px-4' : 'justify-center'}`}
         >
-          <div className="w-8 h-8 rounded-lg bg-cura-blue text-white flex items-center justify-center font-bold text-xl flex-shrink-0 shadow-md shadow-blue-200">
+          <div className="w-8 h-8 rounded-lg bg-cura-blue text-white flex items-center justify-center font-bold text-xl flex-shrink-0 shadow-md shadow-blue-200 dark:shadow-none">
             C
           </div>
           {expanded && (
-            <span className="font-bold text-lg tracking-wide text-cura-dark overflow-hidden whitespace-nowrap">
-              CURA<span className="text-cura-blue">.ai</span>
+            <span className="font-bold text-lg tracking-wide text-cura-dark dark:text-gray-100 overflow-hidden whitespace-nowrap">
+              CURA<span className="text-cura-blue dark:text-blue-400">.ai</span>
             </span>
           )}
         </button>
@@ -73,7 +77,6 @@ const Sidebar = ({ activeTab, badges }) => {
       <nav className="flex flex-col gap-2 px-3 flex-1">
         {navItems.map((item) => {
           const Icon = item.icon;
-          // We check the activeTab passed down from the App's URL logic
           const isActive = activeTab === item.id;
           
           return (
@@ -85,7 +88,7 @@ const Sidebar = ({ activeTab, badges }) => {
               } ${
                 isActive
                   ? 'bg-cura-blue text-white shadow-md shadow-blue-900/20'
-                  : 'text-cura-grey hover:bg-blue-50 hover:text-cura-blue'
+                  : 'text-cura-grey dark:text-gray-400 hover:bg-blue-50 dark:hover:bg-gray-900 hover:text-cura-blue dark:hover:text-blue-400'
               }`}
             >
               <Icon 
@@ -110,7 +113,7 @@ const Sidebar = ({ activeTab, badges }) => {
                 <span className={`absolute bg-red-500 text-white font-bold flex items-center justify-center rounded-full border-2 transition-all duration-300 ${
                   expanded 
                     ? 'right-4 top-1/2 -translate-y-1/2 px-2 py-0.5 text-[10px] min-w-[20px] border-transparent shadow-sm' 
-                    : 'top-1 right-1 w-3.5 h-3.5 text-[0px] border-white'
+                    : 'top-1 right-1 w-3.5 h-3.5 text-[0px] border-white dark:border-gray-950'
                 } ${isActive && !expanded ? 'border-cura-blue' : ''}`}>
                   {expanded ? item.badge : ''}
                 </span>
@@ -118,7 +121,7 @@ const Sidebar = ({ activeTab, badges }) => {
 
               {/* Tooltip on hover when collapsed */}
               {!expanded && (
-                <div className="absolute left-14 bg-cura-dark text-white text-xs font-bold px-2 py-1 rounded-md opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all whitespace-nowrap z-50">
+                <div className="absolute left-14 bg-cura-dark dark:bg-gray-800 text-white text-xs font-bold px-2 py-1 rounded-md opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all whitespace-nowrap z-50">
                   {item.label}
                 </div>
               )}
@@ -127,42 +130,60 @@ const Sidebar = ({ activeTab, badges }) => {
         })}
       </nav>
 
+      {/* Theme Toggle Button inserted just above the profile section */}
+      <div className="px-4 mb-4">
+        <button
+          onClick={toggleTheme}
+          className={`flex items-center w-full p-2.5 rounded-xl transition-all duration-200 text-cura-grey dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900 hover:text-cura-dark dark:hover:text-gray-100 ${
+            expanded ? 'justify-start px-3' : 'justify-center'
+          }`}
+          title={`Switch to ${theme === 'light' ? 'Dark' : 'Light'} Mode`}
+        >
+          {theme === 'light' ? <Moon size={20} /> : <Sun size={20} />}
+          {expanded && (
+            <span className="ml-3 text-sm font-semibold">
+              {theme === 'light' ? 'Dark Mode' : 'Light Mode'}
+            </span>
+          )}
+        </button>
+      </div>
+
       {/* Profile Section at Bottom */}
       <div className="px-3 relative" ref={profileRef}>
-        <div className="h-px bg-gray-100 w-full mb-3" />
+        <div className="h-px bg-gray-100 dark:bg-gray-800 w-full mb-3" />
         
         <button
           onClick={() => setProfileOpen(!profileOpen)}
-          className={`w-full flex items-center p-2 rounded-xl transition-all duration-200 hover:bg-gray-50 border border-transparent hover:border-gray-100 ${
+          className={`w-full flex items-center p-2 rounded-xl transition-all duration-200 hover:bg-gray-50 dark:hover:bg-gray-900 border border-transparent hover:border-gray-100 dark:hover:border-gray-800 ${
             expanded ? 'justify-between px-3' : 'justify-center'
           }`}
         >
           <div className="flex items-center gap-3 overflow-hidden">
-            <div className="w-9 h-9 flex-shrink-0 rounded-full bg-gradient-to-tr from-cura-blue to-blue-400 text-white flex items-center justify-center font-bold text-sm shadow-sm ring-2 ring-white">
+            <div className="w-9 h-9 flex-shrink-0 rounded-full bg-gradient-to-tr from-cura-blue to-blue-400 text-white flex items-center justify-center font-bold text-sm shadow-sm ring-2 ring-white dark:ring-gray-950">
               M
             </div>
             {expanded && (
               <div className="text-left overflow-hidden">
-                <p className="font-bold text-sm text-cura-dark truncate leading-tight">Manager</p>
-                <p className="text-[10px] font-semibold text-cura-grey truncate">manager@cura.org</p>
+                <p className="font-bold text-sm text-cura-dark dark:text-gray-100 truncate leading-tight">Manager</p>
+                <p className="text-[10px] font-semibold text-cura-grey dark:text-gray-500 truncate">manager@cura.org</p>
               </div>
             )}
           </div>
           
-          {expanded && <MoreVertical size={16} className="text-gray-400 flex-shrink-0" />}
+          {expanded && <MoreVertical size={16} className="text-gray-400 dark:text-gray-600 flex-shrink-0" />}
         </button>
 
         {/* Popover Menu */}
         {profileOpen && (
-          <div className="absolute bottom-full left-4 mb-2 w-56 bg-white rounded-2xl shadow-xl shadow-gray-200/50 border border-gray-100 py-2 z-50 origin-bottom-left animate-in fade-in zoom-in-95 duration-200">
+          <div className="absolute bottom-full left-4 mb-2 w-56 bg-white dark:bg-gray-900 rounded-2xl shadow-xl shadow-gray-200/50 dark:shadow-none border border-gray-100 dark:border-gray-800 py-2 z-50 origin-bottom-left animate-in fade-in zoom-in-95 duration-200">
             {/* User Info Header */}
-            <div className="px-4 py-3 border-b border-gray-50 mb-1">
-              <p className="font-bold text-sm text-cura-dark">manager@cura.org</p>
+            <div className="px-4 py-3 border-b border-gray-50 dark:border-gray-800 mb-1">
+              <p className="font-bold text-sm text-cura-dark dark:text-gray-100">manager@cura.org</p>
             </div>
 
             {/* Menu Items */}
             {profileMenuItems.map((item, i) => {
-              if (item.divider) return <div key={i} className="h-px bg-gray-50 my-1" />;
+              if (item.divider) return <div key={i} className="h-px bg-gray-50 dark:bg-gray-800 my-1" />;
               
               const MenuIcon = item.icon;
               return (
@@ -171,15 +192,15 @@ const Sidebar = ({ activeTab, badges }) => {
                   onClick={() => setProfileOpen(false)}
                   className={`w-full text-left px-4 py-2.5 text-sm flex items-center justify-between group transition-colors ${
                     item.danger
-                      ? 'text-red-600 hover:bg-red-50 font-semibold'
-                      : 'text-cura-dark hover:bg-gray-50 font-medium'
+                      ? 'text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 font-semibold'
+                      : 'text-cura-dark dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 font-medium'
                   }`}
                 >
                   <div className="flex items-center gap-3">
-                    <MenuIcon size={16} className={item.danger ? 'text-red-500' : 'text-gray-400 group-hover:text-cura-blue transition-colors'} />
+                    <MenuIcon size={16} className={item.danger ? 'text-red-500 dark:text-red-400' : 'text-gray-400 dark:text-gray-500 group-hover:text-cura-blue dark:group-hover:text-blue-400 transition-colors'} />
                     <span>{item.label}</span>
                   </div>
-                  {!item.danger && <ChevronRight size={14} className="opacity-0 group-hover:opacity-100 -translate-x-2 group-hover:translate-x-0 transition-all text-gray-300" />}
+                  {!item.danger && <ChevronRight size={14} className="opacity-0 group-hover:opacity-100 -translate-x-2 group-hover:translate-x-0 transition-all text-gray-300 dark:text-gray-600" />}
                 </button>
               );
             })}

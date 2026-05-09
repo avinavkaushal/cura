@@ -6,12 +6,13 @@ import Inventory from './components/Inventory';
 import Ledger from './components/Ledger';
 import ApprovalQueue from './components/ApprovalQueue';
 import Automations from './components/Automations';
+import { ThemeProvider } from './context/ThemeContext';
+
+import { db } from './firebase'; 
+import { ref, set, push } from "firebase/database";
 
 function App() {
-  // We use the location hook to know what the current URL is
   const location = useLocation();
-  
-  // Clean up the path name for the title and sidebar (e.g., '/inventory' -> 'inventory')
   const currentPath = location.pathname.replace('/', '') || 'dashboard';
 
   const [badges] = useState({
@@ -20,32 +21,37 @@ function App() {
   });
 
   return (
-    <div className="flex min-h-screen bg-gray-50 font-jost text-cura-dark">
-      {/* Sidebar 
-          Note: We pass a dummy function for setActiveTab right now. 
-          The sidebar buttons won't work perfectly until we do Step 4! */}
-      <Sidebar activeTab={currentPath} setActiveTab={() => {}} badges={badges} />
+    // 2. Wrap the entire app in the ThemeProvider
+    <ThemeProvider>
+      {/* 3. Added dark mode classes to the main wrapper:
+        - dark:bg-gray-950 for the global background
+        - dark:text-gray-100 for the global default text color 
+      */}
+      <div className="flex min-h-screen bg-gray-50 dark:bg-gray-950 font-jost text-cura-dark dark:text-gray-100 transition-colors duration-300">
+        
+        {/* Sidebar */}
+        <Sidebar activeTab={currentPath} badges={badges} />
 
-      {/* Main Content Area */}
-      <main className="flex-1 p-8 overflow-y-auto">
-        <header className="mb-8">
-          <h1 className="text-2xl font-bold capitalize">
-            {currentPath.replace('-', ' ')}
-          </h1>
-        </header>
+        {/* Main Content Area */}
+        <main className="flex-1 p-8 overflow-y-auto">
+          <header className="mb-8">
+            <h1 className="text-2xl font-bold capitalize">
+              {currentPath.replace('-', ' ')}
+            </h1>
+          </header>
 
-        {/* Dynamic Route Rendering based on URL */}
-        <Routes>
-          {/* Default route redirects to dashboard */}
-          <Route path="/" element={<Navigate to="/dashboard" replace />} />
-          <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/inventory" element={<Inventory />} />
-          <Route path="/ledger" element={<Ledger />} />
-          <Route path="/approvals" element={<ApprovalQueue />} />
-          <Route path="/automations" element={<Automations />} />
-        </Routes>
-      </main>
-    </div>
+          {/* Dynamic Route Rendering based on URL */}
+          <Routes>
+            <Route path="/" element={<Navigate to="/dashboard" replace />} />
+            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/inventory" element={<Inventory />} />
+            <Route path="/ledger" element={<Ledger />} />
+            <Route path="/approvals" element={<ApprovalQueue />} />
+            <Route path="/automations" element={<Automations />} />
+          </Routes>
+        </main>
+      </div>
+    </ThemeProvider>
   );
 }
 
