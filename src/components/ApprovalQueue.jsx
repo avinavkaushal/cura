@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { collection, getDocs, addDoc } from "firebase/firestore";
+import { collection, getDocs, addDoc, updateDoc, doc } from "firebase/firestore";
 import { db } from "../firebase";
 import { 
   CheckSquare, Square, BrainCircuit, 
@@ -16,7 +16,7 @@ const initialRejectedHistory = [
 ];
 
 // --- SUB-COMPONENTS ---
-const QuoteCard = ({ quote, isSelected, onToggleSelect, isHistory }) => (
+const QuoteCard = ({ quote, isSelected, onToggleSelect, isHistory, onApprove, onReject }) => (
   <div className={`bg-white dark:bg-gray-900 p-6 rounded-2xl border transition-all ${
     isSelected ? 'border-cura-blue shadow-md ring-1 ring-cura-blue/20' : 'border-gray-100 dark:border-gray-800 shadow-sm dark:shadow-none hover:border-gray-300 dark:hover:border-gray-700'
   }`}>
@@ -86,10 +86,16 @@ const QuoteCard = ({ quote, isSelected, onToggleSelect, isHistory }) => (
 
     {!isHistory && (
       <div className="flex gap-3 mt-4">
-        <button className="flex-1 bg-cura-dark dark:bg-cura-blue text-white font-bold py-2.5 rounded-xl hover:bg-black dark:hover:bg-blue-600 transition-colors shadow-sm">
+        <button 
+          onClick={() => onApprove(quote.id)}
+          className="flex-1 bg-cura-dark dark:bg-cura-blue text-white font-bold py-2.5 rounded-xl hover:bg-black dark:hover:bg-blue-600 transition-colors shadow-sm"
+        >
           Approve Quote
         </button>
-        <button className="px-6 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-red-500 font-bold py-2.5 rounded-xl hover:bg-red-50 dark:hover:bg-red-900/20 hover:border-red-200 dark:hover:border-red-800 transition-colors">
+        <button 
+          onClick={() => onReject(quote.id)}
+          className="px-6 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-red-500 font-bold py-2.5 rounded-xl hover:bg-red-50 dark:hover:bg-red-900/20 hover:border-red-200 dark:hover:border-red-800 transition-colors"
+        >
           Reject
         </button>
       </div>
@@ -114,16 +120,13 @@ const ApprovalQueue = () => {
         
         if (querySnapshot.empty) {
           console.log("No quotes found in Firebase! Auto-seeding database...");
-          // Push Pending Quotes
           for (const q of initialPendingQuotes) {
             await addDoc(collection(db, "quotes"), { ...q, status: 'pending' });
           }
-          // Push Rejected History
           for (const q of initialRejectedHistory) {
             await addDoc(collection(db, "quotes"), { ...q, status: 'rejected' });
           }
           
-          // Re-fetch now that the cloud has data
           const newSnapshot = await getDocs(collection(db, "quotes"));
           parseData(newSnapshot);
         } else {
@@ -154,6 +157,48 @@ const ApprovalQueue = () => {
   const toggleSelectAll = () => { setSelectedIds(selectedIds.length === pendingQuotes.length ? [] : pendingQuotes.map(q => q.id)); };
   const toggleSelect = (id) => { setSelectedIds(prev => prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]); };
   
+  // --- NEW ACTIONS ---
+  const handleApprove = async (id) => {
+    try {
+      await updateDoc(doc(db, "quotes", id), { status: 'approved' });
+      // Optimistically remove from pending UI
+      setPendingQuotes(prev => prev.filter(q => q.id !== id));
+      setSelectedIds(prev => prev.filter(selectedId => selectedId !== id));
+    } catch (error) {
+      console.error("Error approving quote:", error);
+    }
+  };
+
+  const handleReject = async (id) => {
+    try {
+      const rejectedTime = new Date().toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+      await updateDoc(doc(db, "quotes", id), { status: 'rejected', rejectedAt: rejectedTime });
+      
+      // Move to history UI optimistically
+      const rejectedQuote = pendingQuotes.find(q => q.id === id);
+      setPendingQuotes(prev => prev.filter(q => q.id !== id));
+      if (rejectedQuote) {
+        setRejectedHistory(prev => [{ ...rejectedQuote, status: 'rejected', rejectedAt: rejectedTime }, ...prev]);
+      }
+      setSelectedIds(prev => prev.filter(selectedId => selectedId !== id));
+    } catch (error) {
+      console.error("Error rejecting quote:", error);
+    }
+  };
+
+  const handleBulkApprove = async () => {
+    try {
+      for (const id of selectedIds) {
+        await updateDoc(doc(db, "quotes", id), { status: 'approved' });
+      }
+      // Optimistically clear the UI
+      setPendingQuotes(prev => prev.filter(q => !selectedIds.includes(q.id)));
+      setSelectedIds([]);
+    } catch (error) {
+      console.error("Error during bulk approval:", error);
+    }
+  };
+
   const activeData = activeTab === 'pending' ? pendingQuotes : rejectedHistory;
 
   if (loading) {
@@ -213,7 +258,10 @@ const ApprovalQueue = () => {
             </span>
           </div>
           {selectedIds.length > 0 && (
-            <button className="px-4 py-2 bg-cura-dark dark:bg-cura-blue text-white text-xs font-bold rounded-lg hover:bg-black dark:hover:bg-blue-600 transition-colors shadow-sm">
+            <button 
+              onClick={handleBulkApprove}
+              className="px-4 py-2 bg-cura-dark dark:bg-cura-blue text-white text-xs font-bold rounded-lg hover:bg-black dark:hover:bg-blue-600 transition-colors shadow-sm"
+            >
               Bulk Approve Selected
             </button>
           )}
@@ -228,6 +276,8 @@ const ApprovalQueue = () => {
             isSelected={selectedIds.includes(quote.id)}
             onToggleSelect={toggleSelect}
             isHistory={activeTab === 'history'}
+            onApprove={handleApprove}
+            onReject={handleReject}
           />
         ))}
         {activeData.length === 0 && (

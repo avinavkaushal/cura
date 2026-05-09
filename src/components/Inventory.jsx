@@ -1,4 +1,3 @@
-import React, { useState, useEffect } from 'react';
 import React, { useState, useEffect, useRef } from 'react';
 import { collection, getDocs, addDoc } from "firebase/firestore";
 import { db } from "../firebase";
@@ -249,9 +248,14 @@ const Inventory = () => {
   const [activeTab, setActiveTab] = useState('All');
   const tabs = ['All', 'Food', 'Medical', 'Education', 'Hygiene'];
 
-  // 1. STATE FOR LIVE DATA
+  // 1. STATE FOR LIVE DATA & FILTERS
   const [inventoryData, setInventoryData] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [sortBy, setSortBy] = useState('name'); // 'name', 'stockLow', 'stockHigh'
+
+  // Modal State
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
@@ -270,14 +274,13 @@ const Inventory = () => {
     setIsUploading(true);
 
     Papa.parse(file, {
-      header: true, // Expects the first row of the CSV to have column names
+      header: true,
       skipEmptyLines: true,
       complete: async (results) => {
         const rows = results.data;
         setUploadStats({ total: rows.length, current: 0 });
         let newItems = [];
 
-        // Loop through CSV rows and push to Firebase
         for (let i = 0; i < rows.length; i++) {
           const row = rows[i];
           try {
@@ -294,18 +297,14 @@ const Inventory = () => {
             const docRef = await addDoc(collection(db, "inventory"), newItem);
             newItems.push({ id: docRef.id, ...newItem });
             
-            // Update progress state
             setUploadStats(prev => ({ ...prev, current: i + 1 }));
           } catch (err) {
             console.error("Error uploading row:", err);
           }
         }
 
-        // Add all new items to the UI table instantly
         setInventoryData(prev => [...newItems, ...prev]);
         setIsUploading(false);
-        
-        // Reset the file input so you can upload the same file again if needed
         if(fileInputRef.current) fileInputRef.current.value = '';
       },
       error: (error) => {
@@ -349,13 +348,9 @@ const Inventory = () => {
         trend: [] 
       };
 
-      // Push to Firebase
       const docRef = await addDoc(collection(db, "inventory"), newItem);
-      
-      // Update table instantly without refresh
       setInventoryData([...inventoryData, { id: docRef.id, ...newItem }]);
       
-      // Clean up
       setFormData({ name: '', category: 'Food', stock: '', unit: 'kg', consumption: '' });
       setIsAddModalOpen(false);
       setIsSubmitting(false);
@@ -365,7 +360,19 @@ const Inventory = () => {
     }
   };
 
-  // 3. SHOW LOADING SCREEN WHILE FETCHING
+  // --- 2. FILTER & SORT LOGIC ---
+  const displayedData = inventoryData
+    .filter(item => {
+      const matchesTab = activeTab === 'All' || item.category === activeTab;
+      const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase());
+      return matchesTab && matchesSearch;
+    })
+    .sort((a, b) => {
+      if (sortBy === 'stockLow') return a.stock - b.stock;
+      if (sortBy === 'stockHigh') return b.stock - a.stock;
+      return a.name.localeCompare(b.name);
+    });
+
   if (loading) {
     return (
       <div className="w-full min-h-screen p-8 flex items-center justify-center font-jost">
@@ -388,18 +395,39 @@ const Inventory = () => {
         </div>
         
         <div className="flex items-center gap-3 w-full md:w-auto">
+          {/* Active Search Bar */}
           <div className="relative flex-1 md:w-64">
             <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
             <input 
               type="text" 
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="Search items..." 
               className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl text-sm focus:outline-none focus:border-cura-blue focus:ring-1 focus:ring-cura-blue transition-all dark:text-white"
             />
           </div>
-          <button className="p-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl text-cura-dark dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
-            <Filter size={18} />
-          </button>
-          {/* CSV Upload Hidden Input & Button */}
+          
+          {/* Active Filter Dropdown */}
+          <div className="relative">
+            <button 
+              onClick={() => setIsFilterOpen(!isFilterOpen)}
+              className="p-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl text-cura-dark dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+            >
+              <Filter size={18} />
+            </button>
+            
+            {isFilterOpen && (
+              <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-xl shadow-lg z-10 overflow-hidden animate-in fade-in slide-in-from-top-2">
+                <div className="p-2 space-y-1">
+                  <p className="text-[10px] uppercase font-bold text-gray-400 px-3 pt-1 pb-2">Sort By</p>
+                  <button onClick={() => { setSortBy('name'); setIsFilterOpen(false); }} className={`w-full text-left px-3 py-2 text-sm font-semibold rounded-lg ${sortBy === 'name' ? 'bg-blue-50 text-cura-blue dark:bg-blue-900/30 dark:text-blue-400' : 'hover:bg-gray-50 dark:hover:bg-gray-800 text-cura-dark dark:text-gray-200'}`}>A-Z (Name)</button>
+                  <button onClick={() => { setSortBy('stockLow'); setIsFilterOpen(false); }} className={`w-full text-left px-3 py-2 text-sm font-semibold rounded-lg ${sortBy === 'stockLow' ? 'bg-blue-50 text-cura-blue dark:bg-blue-900/30 dark:text-blue-400' : 'hover:bg-gray-50 dark:hover:bg-gray-800 text-cura-dark dark:text-gray-200'}`}>Stock: Low to High</button>
+                  <button onClick={() => { setSortBy('stockHigh'); setIsFilterOpen(false); }} className={`w-full text-left px-3 py-2 text-sm font-semibold rounded-lg ${sortBy === 'stockHigh' ? 'bg-blue-50 text-cura-blue dark:bg-blue-900/30 dark:text-blue-400' : 'hover:bg-gray-50 dark:hover:bg-gray-800 text-cura-dark dark:text-gray-200'}`}>Stock: High to Low</button>
+                </div>
+              </div>
+            )}
+          </div>
+
           <input 
             type="file" 
             accept=".csv" 
@@ -414,7 +442,6 @@ const Inventory = () => {
             <Upload size={18} /> Upload CSV
           </button>
 
-          {/* Add Resource Button */}
           <button 
             onClick={() => setIsAddModalOpen(true)}
             className="flex items-center gap-2 px-5 py-2.5 text-sm font-bold text-white bg-cura-dark dark:bg-cura-blue rounded-xl hover:bg-black dark:hover:bg-blue-600 transition-all shadow-md"
@@ -455,16 +482,18 @@ const Inventory = () => {
               </tr>
             </thead>
             <tbody>
-              {inventoryData.filter(item => activeTab === 'All' || item.category === activeTab).map(item => (
+              {displayedData.map(item => (
                 <InventoryRow key={item.id} item={item} />
               ))}
             </tbody>
           </table>
           
           {/* Empty State */}
-          {inventoryData.length === 0 && (
-             <div className="p-8 text-center text-cura-grey dark:text-gray-400 font-bold">
-                No items found in Firebase. Ensure you seeded the database!
+          {displayedData.length === 0 && (
+             <div className="p-12 flex flex-col items-center justify-center text-center">
+                <Search size={32} className="text-gray-300 dark:text-gray-600 mb-4" />
+                <p className="text-cura-dark dark:text-gray-300 font-bold text-lg">No items found</p>
+                <p className="text-sm text-cura-grey dark:text-gray-500 mt-1">Try adjusting your search or category filter.</p>
              </div>
           )}
         </div>
@@ -491,12 +520,11 @@ const Inventory = () => {
           ))}
         </div>
       </div>
+      
       {/* ADD ITEM MODAL */}
       {isAddModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 dark:bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="bg-white dark:bg-gray-900 w-full max-w-md rounded-[2rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
-            
-            {/* Modal Header */}
             <div className="p-6 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center bg-gray-50/50 dark:bg-gray-800/30">
               <div>
                 <h3 className="font-bold text-lg text-cura-dark dark:text-gray-100">Add New Resource</h3>
@@ -506,14 +534,11 @@ const Inventory = () => {
                 <X size={20} />
               </button>
             </div>
-
-            {/* Modal Form */}
             <form onSubmit={handleAddItem} className="p-6 space-y-4">
               <div className="space-y-1">
                 <label className="text-xs font-bold uppercase text-cura-grey dark:text-gray-400">Item Name</label>
                 <input required type="text" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-cura-dark dark:text-gray-200 text-sm font-bold rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-cura-blue/30" placeholder="e.g., Apple Juice" />
               </div>
-
               <div className="space-y-1">
                 <label className="text-xs font-bold uppercase text-cura-grey dark:text-gray-400">Category</label>
                 <select value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})} className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-cura-dark dark:text-gray-200 text-sm font-bold rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-cura-blue/30">
@@ -523,7 +548,6 @@ const Inventory = () => {
                   <option>Hygiene</option>
                 </select>
               </div>
-
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
                   <label className="text-xs font-bold uppercase text-cura-grey dark:text-gray-400">Initial Stock</label>
@@ -534,12 +558,10 @@ const Inventory = () => {
                   <input required type="text" value={formData.unit} onChange={e => setFormData({...formData, unit: e.target.value})} className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-cura-dark dark:text-gray-200 text-sm font-bold rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-cura-blue/30" placeholder="kg, boxes, L..." />
                 </div>
               </div>
-
               <div className="space-y-1">
                 <label className="text-xs font-bold uppercase text-cura-grey dark:text-gray-400">Est. Daily Consumption</label>
                 <input required type="number" value={formData.consumption} onChange={e => setFormData({...formData, consumption: e.target.value})} className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-cura-dark dark:text-gray-200 text-sm font-bold rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-cura-blue/30" placeholder="e.g., 2" />
               </div>
-
               <button type="submit" disabled={isSubmitting} className="w-full mt-4 py-3.5 bg-cura-dark dark:bg-cura-blue text-white font-bold rounded-xl hover:bg-black dark:hover:bg-blue-600 transition-colors shadow-lg disabled:opacity-50">
                 {isSubmitting ? 'Saving to Database...' : 'Save Resource'}
               </button>
@@ -547,7 +569,8 @@ const Inventory = () => {
           </div>
         </div>
       )}
-{/* CSV UPLOADING OVERLAY */}
+
+      {/* CSV UPLOADING OVERLAY */}
       {isUploading && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-white/80 dark:bg-gray-950/80 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="flex flex-col items-center gap-4">
