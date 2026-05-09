@@ -1,26 +1,17 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { collection, getDocs } from "firebase/firestore";
+import { db } from "../firebase";
+
 import { 
   BarChart, Bar, ResponsiveContainer, XAxis, Tooltip, Cell 
 } from 'recharts';
 import { 
   AlertTriangle, Clock, FileWarning, ArrowRight, 
-  ShieldCheck, Tag, Server, Zap, FileText, Plus, Activity
+  ShieldCheck, Tag, Server, Zap, FileText, Plus, Activity, AlertCircle
 } from 'lucide-react';
 
-// --- MOCK DATA ---
-const alertData = [
-  { id: 1, type: 'danger', icon: AlertTriangle, title: '3 Low Stock Items', action: 'Review Stock', color: 'text-red-600 dark:text-red-400', bg: 'bg-red-50 dark:bg-red-500/10', border: 'border-red-100 dark:border-red-500/20', route: '/inventory' },
-  { id: 2, type: 'warning', icon: Clock, title: '2 Pending Approvals', action: 'Approve Now', color: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-50 dark:bg-amber-500/10', border: 'border-amber-100 dark:border-amber-500/20', route: '/approvals' },
-  { id: 3, type: 'info', icon: FileWarning, title: '4 Unverified Receipts', action: 'Verify Receipts', color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-500/10', border: 'border-blue-100 dark:border-blue-500/20', route: '/ledger' },
-];
-
-const statData = [
-  { title: 'Total Donations', value: '₹4,50,000', trend: '+12% this month', chart: [30, 45, 20, 60, 40, 80, 50] },
-  { title: 'Active Needs', value: '12', trend: '3 high priority', chart: [10, 15, 12, 8, 14, 12, 12] },
-  { title: 'Funds Disbursed', value: '₹2,80,000', trend: 'In 42 transactions', chart: [20, 30, 50, 40, 60, 45, 70] },
-];
-
+// --- MOCK DATA FOR CHARTS & FEED (We will make these fully live later) ---
 const monthlyAllocationData = [
   { name: 'Jan', value: 4000 }, { name: 'Feb', value: 3000 },
   { name: 'Mar', value: 5000 }, { name: 'Apr', value: 2780 },
@@ -33,7 +24,6 @@ const activityFeed = [
   { id: 2, agent: 'Procurement Agent', task: 'Negotiated Lentils price down to ₹40/kg', time: '15 mins ago', icon: Tag, status: 'success' },
   { id: 3, agent: 'System', task: 'Flagged receipt mismatch for Apollo Med', time: '1 hour ago', icon: Server, status: 'warning' },
   { id: 4, agent: 'Finance Agent', task: 'Mapped ₹12,000 to Education Fund', time: '3 hours ago', icon: ShieldCheck, status: 'success' },
-  { id: 5, agent: 'Procurement Agent', task: 'Requested quotes for 100kg Wheat Flour', time: '5 hours ago', icon: Tag, status: 'info' },
 ];
 
 // --- SUB-COMPONENTS ---
@@ -42,16 +32,14 @@ const CuraStatCard = ({ title, value, trend, chartData }) => (
     <span className="text-[10px] font-bold uppercase tracking-wider text-cura-grey dark:text-gray-400">
       {title}
     </span>
-    <h3 className="text-4xl font-bold tracking-tight text-cura-dark dark:text-gray-100">{value}</h3>
-    <p className="text-xs font-semibold text-cura-blue dark:text-blue-400">
-      {trend}
-    </p>
-    <div className="mt-4 h-12 w-full opacity-60">
-      <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={chartData.map((val, i) => ({ value: val, index: i }))}>
-          <Bar dataKey="value" fill="#17439B" radius={[4, 4, 4, 4]} barSize={8} />
-        </BarChart>
-      </ResponsiveContainer>
+    <h3 className="text-4xl font-black text-cura-dark dark:text-gray-100 tracking-tight">{value}</h3>
+    <div className="flex items-center justify-between mt-1">
+      <span className="text-xs font-bold text-cura-blue dark:text-blue-400">{trend}</span>
+      <div className="h-6 w-16 flex items-end gap-1">
+        {chartData.map((val, i) => (
+          <div key={i} className="flex-1 bg-cura-blue/20 dark:bg-blue-500/20 rounded-sm" style={{ height: `${val}%` }}></div>
+        ))}
+      </div>
     </div>
   </div>
 );
@@ -59,7 +47,7 @@ const CuraStatCard = ({ title, value, trend, chartData }) => (
 const CustomTooltip = ({ active, payload }) => {
   if (active && payload && payload.length) {
     return (
-      <div className="bg-white dark:bg-gray-800 px-4 py-2 rounded-xl shadow-lg border border-gray-50 dark:border-gray-700 text-sm font-bold text-cura-dark dark:text-gray-100">
+      <div className="bg-cura-dark dark:bg-black text-white px-4 py-2 rounded-xl text-sm font-bold shadow-xl border border-white/10">
         ₹{payload[0].value.toLocaleString()}
       </div>
     );
@@ -67,9 +55,90 @@ const CustomTooltip = ({ active, payload }) => {
   return null;
 };
 
-// --- MAIN COMPONENT ---
+// --- MAIN DASHBOARD COMPONENT ---
 const Dashboard = () => {
   const navigate = useNavigate();
+  
+  const [loading, setLoading] = useState(true);
+  
+  // LIVE FIREBASE STATES
+  const [totalDonations, setTotalDonations] = useState(0);
+  const [fundsDisbursed, setFundsDisbursed] = useState(0);
+  const [lowStockCount, setLowStockCount] = useState(0);
+  const [unverifiedCount, setUnverifiedCount] = useState(0);
+
+  // FETCH & CALCULATE LIVE DATA
+  useEffect(() => {
+    const fetchDashboardStats = async () => {
+      try {
+        // 1. Calculate Inventory Stats
+        const invSnapshot = await getDocs(collection(db, "inventory"));
+        let lowStock = 0;
+        
+        invSnapshot.docs.forEach(doc => {
+          const item = doc.data();
+          const daysLeft = Math.floor((item.stock || 0) / (item.consumption || 1));
+          if (item.status === 'critical' || daysLeft < 7) {
+            lowStock++;
+          }
+        });
+
+        // 2. Calculate Transaction Stats
+        const txSnapshot = await getDocs(collection(db, "transactions"));
+        let totalInflow = 0;
+        let totalOutflow = 0;
+        let unverified = 0;
+
+        txSnapshot.docs.forEach(doc => {
+          const tx = doc.data();
+          if (tx.type === 'Inflow') {
+            totalInflow += Number(tx.amount || 0);
+          } else {
+            totalOutflow += Number(tx.amount || 0);
+          }
+          if (tx.status === 'Pending Review' || tx.status === 'Not Uploaded' || tx.status === 'Mismatch') {
+            unverified++;
+          }
+        });
+
+        setLowStockCount(lowStock);
+        setTotalDonations(totalInflow);
+        setFundsDisbursed(totalOutflow);
+        setUnverifiedCount(unverified);
+        setLoading(false);
+      } catch (error) {
+        console.error("Error fetching dashboard data:", error);
+        setLoading(false);
+      }
+    };
+
+    fetchDashboardStats();
+  }, []);
+
+  // DYNAMIC ALERTS BASED ON LIVE DATA
+  const alertData = [
+    { id: 1, type: 'danger', icon: AlertTriangle, title: `${lowStockCount} Low Stock Items`, action: 'Review Stock', color: 'text-red-600 dark:text-red-400', bg: 'bg-red-50 dark:bg-red-900/10', border: 'border-red-100 dark:border-red-900/20', route: '/inventory' },
+    { id: 2, type: 'warning', icon: Clock, title: `2 Pending Approvals`, action: 'Approve Now', color: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-50 dark:bg-amber-900/10', border: 'border-amber-100 dark:border-amber-900/20', route: '/approvals' },
+    { id: 3, type: 'info', icon: FileWarning, title: `${unverifiedCount} Unverified Receipts`, action: 'Verify Receipts', color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-900/10', border: 'border-blue-100 dark:border-blue-900/20', route: '/ledger' },
+  ];
+
+  // DYNAMIC STAT CARDS BASED ON LIVE DATA
+  const statData = [
+    { title: 'Total Donations', value: `₹${totalDonations.toLocaleString()}`, trend: 'Live from Firebase', chart: [30, 45, 20, 60, 40, 80, 50] },
+    { title: 'Active Needs', value: lowStockCount.toString(), trend: 'High priority items', chart: [10, 15, 12, 8, 14, 12, 12] },
+    { title: 'Funds Disbursed', value: `₹${fundsDisbursed.toLocaleString()}`, trend: 'Live from Firebase', chart: [20, 30, 50, 40, 60, 45, 70] },
+  ];
+
+  if (loading) {
+    return (
+      <div className="w-full min-h-screen p-8 flex items-center justify-center font-jost">
+        <div className="flex flex-col items-center gap-4">
+          <Activity size={40} className="text-cura-blue animate-bounce" />
+          <p className="text-cura-dark dark:text-white font-bold text-xl">Calculating Live Stats...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="w-full min-h-screen bg-transparent p-8 font-jost text-cura-dark dark:text-gray-100 flex flex-col gap-8">
@@ -158,70 +227,36 @@ const Dashboard = () => {
                 <Activity size={18} className="text-cura-blue dark:text-blue-400" />
                 Live Agent Activity
               </h3>
-              <div className="flex items-center gap-2 bg-blue-50 dark:bg-blue-500/10 px-3 py-1 rounded-full">
-                <div className="w-2 h-2 rounded-full bg-cura-blue dark:bg-blue-400 animate-pulse"></div>
-                <span className="text-[10px] font-bold uppercase tracking-wider text-cura-blue dark:text-blue-400">Online</span>
+              <div className="flex items-center gap-1 text-[10px] font-bold text-emerald-500 uppercase tracking-wider bg-emerald-50 dark:bg-emerald-500/10 px-2 py-1 rounded-md">
+                <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></div> Online
               </div>
             </div>
             
-            {/* Scrolling Feed Container */}
-            <div className="flex-1 overflow-y-auto pr-2 space-y-5 custom-scrollbar">
+            <div className="relative pl-3 space-y-6 flex-1">
+              <div className="absolute left-[19px] top-4 bottom-4 w-px bg-gray-100 dark:bg-gray-800"></div>
               {activityFeed.map((activity) => (
-                <div key={activity.id} className="relative pl-6 before:absolute before:left-[11px] before:top-8 before:bottom-[-20px] before:w-[2px] before:bg-gray-100 dark:before:bg-gray-800 last:before:hidden">
-                  {/* Status Node */}
-                  <div className={`absolute left-0 top-1 w-6 h-6 rounded-full flex items-center justify-center border-2 border-white dark:border-gray-900 shadow-sm dark:shadow-none ${
-                    activity.status === 'success' ? 'bg-green-100 dark:bg-green-500/20 text-green-600 dark:text-green-400' :
-                    activity.status === 'warning' ? 'bg-amber-100 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400' : 'bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400'
+                <div key={activity.id} className="relative flex gap-4 group cursor-pointer">
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 z-10 border-2 border-white dark:border-gray-900 transition-transform group-hover:scale-110 ${
+                    activity.status === 'success' ? 'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400' :
+                    activity.status === 'warning' ? 'bg-amber-100 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400' :
+                    'bg-blue-100 dark:bg-blue-500/20 text-cura-blue dark:text-blue-400'
                   }`}>
-                    <div className={`w-2 h-2 rounded-full ${
-                      activity.status === 'success' ? 'bg-green-500' :
-                      activity.status === 'warning' ? 'bg-amber-500' : 'bg-blue-500'
-                    }`} />
+                    <activity.icon size={14} strokeWidth={2.5} />
                   </div>
-                  
-                  {/* Content */}
-                  <div className="bg-gray-50/50 dark:bg-gray-800/50 p-4 rounded-2xl border border-gray-100 dark:border-gray-800 transition-all hover:bg-gray-50 dark:hover:bg-gray-800">
-                    <div className="flex justify-between items-start mb-1">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-cura-grey dark:text-gray-400 flex items-center gap-1">
-                        <activity.icon size={12} /> {activity.agent}
-                      </span>
-                      <span className="text-[10px] font-semibold text-gray-400 dark:text-gray-500">{activity.time}</span>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <p className="text-xs font-bold text-cura-dark dark:text-gray-100">{activity.agent}</p>
+                      <span className="text-[10px] font-bold text-cura-grey dark:text-gray-500">{activity.time}</span>
                     </div>
-                    <p className="text-sm font-medium text-cura-dark dark:text-gray-200 leading-snug">
-                      {activity.task}
-                    </p>
+                    <p className="text-sm text-cura-grey dark:text-gray-400 mt-0.5 leading-snug">{activity.task}</p>
                   </div>
                 </div>
               ))}
             </div>
-          </div>
 
-          {/* Quick Actions (Manual Overrides) */}
-          <div className="bg-cura-dark dark:bg-gray-900 text-white p-8 rounded-[2.5rem] shadow-lg border border-transparent dark:border-gray-800">
-            <h3 className="font-bold text-lg mb-1 flex items-center gap-2">
-              <Zap size={18} className="text-yellow-400" /> Quick Actions
-            </h3>
-            <p className="text-xs text-gray-400 mb-6 font-medium">Manual system overrides</p>
-            
-            <div className="space-y-3">
-              <button onClick={() => navigate('/inventory')} className="w-full bg-white/10 dark:bg-gray-800 hover:bg-white/20 dark:hover:bg-gray-700 transition-all text-white font-semibold py-3 px-4 rounded-2xl flex items-center justify-between group border border-transparent dark:border-gray-700">
-                <span className="flex items-center gap-3 text-sm">
-                  <Tag size={16} /> Trigger AI Sourcing
-                </span>
-                <ArrowRight size={16} className="opacity-50 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
-              </button>
-              
-              <button onClick={() => navigate('/ledger')} className="w-full bg-white/10 dark:bg-gray-800 hover:bg-white/20 dark:hover:bg-gray-700 transition-all text-white font-semibold py-3 px-4 rounded-2xl flex items-center justify-between group border border-transparent dark:border-gray-700">
-                <span className="flex items-center gap-3 text-sm">
-                  <FileText size={16} /> Generate Report
-                </span>
-                <ArrowRight size={16} className="opacity-50 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
-              </button>
-              
-              <button className="w-full border border-white/20 dark:border-gray-700 hover:bg-white/10 dark:hover:bg-gray-800 transition-all text-white font-semibold py-3 px-4 rounded-2xl flex items-center justify-center gap-2 mt-2">
-                <Plus size={16} /> Add Manual Entry
-              </button>
-            </div>
+            <button className="w-full mt-6 py-3 rounded-xl border-2 border-dashed border-gray-200 dark:border-gray-800 text-cura-grey dark:text-gray-400 text-xs font-bold hover:border-cura-blue hover:text-cura-blue dark:hover:border-blue-500/50 dark:hover:text-blue-400 transition-colors flex justify-center items-center gap-2">
+              <FileText size={14} /> View Full Logs
+            </button>
           </div>
 
         </div>

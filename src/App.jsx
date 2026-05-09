@@ -9,7 +9,7 @@ import Automations from './components/Automations';
 import { ThemeProvider } from './context/ThemeContext';
 
 import { db } from './firebase'; 
-import { ref, set, push } from "firebase/database"; 
+import { ref, set, push } from "firebase/database";
 
 function App() {
   const location = useLocation();
