@@ -7,7 +7,8 @@ import Ledger from './components/Ledger';
 import ApprovalQueue from './components/ApprovalQueue';
 import Automations from './components/Automations';
 import { ThemeProvider } from './context/ThemeContext';
-import { initializeRobustDatabase } from './seedData';
+import Auth from './components/Auth';
+
 
 
 import { db } from './firebase'; 
@@ -16,16 +17,32 @@ import { ref, set, push } from "firebase/database";
 function App() {
   const location = useLocation();
   const currentPath = location.pathname.replace('/', '') || 'dashboard';
-/*
-  useEffect(() => {
-    initializeRobustDatabase();
-  }, []);*/
+  
+  // Fake auth state (we'll connect to Firebase later)
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   const [badges] = useState({
     approvals: 2,
     inventory: 0
   });
 
+  // If not authenticated, only show the Auth page without the Sidebar
+  if (!isAuthenticated) {
+    return (
+      <ThemeProvider>
+        <div className="flex min-h-screen bg-gray-50 dark:bg-gray-950 font-jost text-cura-dark dark:text-gray-100 transition-colors duration-300">
+          <div className="flex-1">
+            <Routes>
+              <Route path="/auth" element={<Auth onLoginSuccess={() => setIsAuthenticated(true)} />} />
+              <Route path="*" element={<Navigate to="/auth" replace />} />
+            </Routes>
+          </div>
+        </div>
+      </ThemeProvider>
+    );
+  }
+
+  // Once authenticated, show the full Dashboard with Sidebar
   return (
     <ThemeProvider>
       <div className="flex min-h-screen bg-gray-50 dark:bg-gray-950 font-jost text-cura-dark dark:text-gray-100 transition-colors duration-300">
@@ -49,6 +66,7 @@ function App() {
             <Route path="/ledger" element={<Ledger />} />
             <Route path="/approvals" element={<ApprovalQueue />} />
             <Route path="/automations" element={<Automations />} />
+            <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Routes>
         </main>
       </div>
