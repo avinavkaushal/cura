@@ -1,40 +1,49 @@
-// src/seedData.js
-import { collection, addDoc } from "firebase/firestore"; 
-import { db } from "./firebase"; 
+import { db } from "./firebase";
+import { collection, addDoc, getDocs, writeBatch, doc, serverTimestamp } from "firebase/firestore";
 
-// 1. Inventory Mock Data
-const inventoryData = [
-  { name: "Basmati Rice", category: "Food", stock: 120, unit: "kg", consumption: 15, status: 'healthy', trend: [{day: 'Mon', val: 140}, {day: 'Tue', val: 135}, {day: 'Wed', val: 130}, {day: 'Thu', val: 125}, {day: 'Fri', val: 120}] },
-  { name: "Lentils (Dal)", category: "Food", stock: 15, unit: "kg", consumption: 8, status: 'critical', trend: [{day: 'Mon', val: 40}, {day: 'Tue', val: 32}, {day: 'Wed', val: 24}, {day: 'Thu', val: 18}, {day: 'Fri', val: 15}] },
-  { name: "Paracetamol", category: "Medical", stock: 450, unit: "tabs", consumption: 20, status: 'healthy', trend: [{day: 'Mon', val: 500}, {day: 'Tue', val: 480}, {day: 'Wed', val: 470}, {day: 'Thu', val: 460}, {day: 'Fri', val: 450}] },
-  { name: "Antiseptic Liquid", category: "Hygiene", stock: 12, unit: "L", consumption: 2, status: 'warning', trend: [{day: 'Mon', val: 18}, {day: 'Tue', val: 16}, {day: 'Wed', val: 15}, {day: 'Thu', val: 13}, {day: 'Fri', val: 12}] }
-];
+export const initializeRobustDatabase = async () => {
+  console.log("🛠️ Initializing Robust Database Schema...");
 
-// 2. Ledger/Transaction Mock Data
-const transactionData = [
-  { date: '12 May 2024', donor: 'Aditi Sharma', amount: 5000, category: 'Education', type: 'Inflow', status: 'Auto-Verified' },
-  { date: '11 May 2024', donor: 'Global Tech CSR', amount: 25000, category: 'Healthcare', type: 'Inflow', status: 'Verified' },
-  { date: '10 May 2024', donor: 'Vendor: Fresh Mart', amount: 1200, category: 'Food & Rations', type: 'Disbursement', status: 'Pending Review' },
-  { date: '08 May 2024', donor: 'Rahul Verma', amount: 2000, category: 'Emergency Relief', type: 'Inflow', status: 'Mismatch' },
-  { date: '05 May 2024', donor: 'Suresh Iyer', amount: 10000, category: 'Education', type: 'Inflow', status: 'Not Uploaded' },
-  { date: '02 May 2024', donor: 'Vendor: Apollo Med', amount: 4500, category: 'Healthcare', type: 'Disbursement', status: 'Auto-Verified' }
-];
+  // 1. Create a Master Donor (CRM)
+  const donorRef = await addDoc(collection(db, "donors"), {
+    name: "Aditi Sharma",
+    email: "aditi.s@gmail.com",
+    phone: "+91 98765 43210",
+    pan_number: "BPXPS1234K",
+    total_donated: 25000,
+    last_donation: serverTimestamp()
+  });
 
-export const seedDatabase = async () => {
-  try {
-    console.log("Seeding Inventory...");
-    for (const item of inventoryData) {
-      await addDoc(collection(db, "inventory"), item);
-    }
+  // 2. Create a Master Vendor
+  const vendorRef = await addDoc(collection(db, "vendors"), {
+    name: "Local Mandi Services",
+    whatsapp_number: "+91 91234 56789",
+    categories: ["Food", "Rations"],
+    trust_score: 4.9,
+    active_contracts: 2
+  });
 
-    console.log("Seeding Transactions...");
-    for (const txn of transactionData) {
-      await addDoc(collection(db, "transactions"), txn);
-    }
-
-    alert("Database Seeded Successfully! You can delete this button now.");
-  } catch (error) {
-    console.error("Error seeding database: ", error);
-    alert("Error seeding data. Check your browser console.");
+  // 3. Setup Initial Activity Logs (For the Dashboard)
+  const logs = [
+    { agent: "Finance Agent", action: "Matched ₹15,000 donation to Meera Kapoor", status: "success", timestamp: serverTimestamp() },
+    { agent: "Procurement Agent", action: "Triggered RFQ for 100kg Wheat Flour", status: "info", timestamp: serverTimestamp() },
+    { agent: "System", action: "Low stock alert: Paracetamol (5 days left)", status: "warning", timestamp: serverTimestamp() }
+  ];
+  
+  for (const log of logs) {
+    await addDoc(collection(db, "activity_logs"), log);
   }
+
+  // 4. Update Inventory with thresholds
+  const invSnapshot = await getDocs(collection(db, "inventory"));
+  const batch = writeBatch(db);
+  invSnapshot.docs.forEach((d) => {
+    batch.update(d.ref, {
+      reorder_threshold: 20, // AI triggers sourcing when stock < 20
+      last_updated: serverTimestamp()
+    });
+  });
+  await batch.commit();
+
+  console.log("✅ Database Schema initialized and linked!");
 };

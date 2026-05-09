@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { collection, getDocs, addDoc } from "firebase/firestore";
+import { collection, getDocs, addDoc, onSnapshot, serverTimestamp } from "firebase/firestore";
 import { db } from "../firebase";
 import Papa from 'papaparse';
 
@@ -27,17 +27,21 @@ const AI_REASONING_STEPS = [
 ];
 
 // --- COMPONENT 1: Individual Row in the Table ---
-const InventoryRow = ({ item }) => {
+const InventoryRow = ({ item, vendors }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [sourcingState, setSourcingState] = useState('idle');
   const [reasoningStep, setReasoningStep] = useState(0);
 
-  // Fallback calculations
-  const consumption = item.consumption || 1; 
+  // Dynamic calculations
+  const consumption = item.daily_consumption || item.consumption || 1; 
   const stock = item.stock || 0;
   const daysLeft = Math.floor(stock / consumption);
+  const isBelowThreshold = stock < (item.reorder_threshold || 20);
   
   const triggerSourcing = async () => {
+    // 1. Find the best vendor in the database for this item's category
+    const relevantVendor = vendors.find(v => v.categories?.includes(item.category)) || vendors[0];
+    
     // 1. Start UI animation
     setSourcingState('thinking');
     setReasoningStep(0);
@@ -56,9 +60,9 @@ const InventoryRow = ({ item }) => {
         body: JSON.stringify({
           item_name: item.name,
           current_stock: item.stock,
-          required_stock: item.stock + 30, 
-          vendor_name: "Local Mandi Services",
-          automation_mode: "human" 
+          threshold: item.reorder_threshold, // Send real threshold to AI
+          vendor_name: relevantVendor?.name || "Local Market",
+          vendor_contact: relevantVendor?.whatsapp_number || ""
         })
       });
 
@@ -250,6 +254,7 @@ const Inventory = () => {
 
   // 1. STATE FOR LIVE DATA & FILTERS
   const [inventoryData, setInventoryData] = useState([]);
+  const [vendors, setVendors] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [isFilterOpen, setIsFilterOpen] = useState(false);
@@ -289,8 +294,9 @@ const Inventory = () => {
               category: row.category || 'Other',
               stock: Number(row.stock) || 0,
               unit: row.unit || 'units',
-              consumption: Number(row.consumption) || 1,
-              status: 'healthy',
+              daily_consumption: Number(row.consumption) || 1,
+              reorder_threshold: Number(row.threshold) || 20,
+              last_updated: serverTimestamp(),
               trend: []
             };
 
@@ -316,22 +322,27 @@ const Inventory = () => {
   };
 
   useEffect(() => {
-    const fetchInventory = async () => {
-      try {
-        const querySnapshot = await getDocs(collection(db, "inventory"));
-        const liveData = querySnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }));
-        setInventoryData(liveData);
-        setLoading(false);
-      } catch (error) {
-        console.error("Error fetching live inventory: ", error);
-        setLoading(false);
-      }
-    };
+    // 1. Live listener for Inventory
+    const unsubInv = onSnapshot(collection(db, "inventory"), (snapshot) => {
+      const items = snapshot.docs.map(doc => {
+        const data = doc.data();
+        // Logic: Status is now derived from the 'reorder_threshold' in DB
+        let derivedStatus = 'healthy';
+        if (data.stock <= (data.reorder_threshold || 10)) derivedStatus = 'critical';
+        else if (data.stock <= ((data.reorder_threshold || 10) * 1.5)) derivedStatus = 'warning';
+        
+        return { id: doc.id, ...data, status: derivedStatus };
+      });
+      setInventoryData(items);
+    });
 
-    fetchInventory();
+    // 2. Live listener for Vendors (to pass to AI Agent)
+    const unsubVendors = onSnapshot(collection(db, "vendors"), (snapshot) => {
+      setVendors(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      setLoading(false);
+    });
+
+    return () => { unsubInv(); unsubVendors(); };
   }, []);
 
   const handleAddItem = async (e) => {
@@ -483,7 +494,7 @@ const Inventory = () => {
             </thead>
             <tbody>
               {displayedData.map(item => (
-                <InventoryRow key={item.id} item={item} />
+                <InventoryRow key={item.id} item={item} vendors={vendors} />
               ))}
             </tbody>
           </table>

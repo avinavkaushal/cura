@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { collection, getDocs, addDoc, updateDoc, doc } from "firebase/firestore";
+import { collection, getDocs, addDoc, updateDoc, doc, deleteDoc } from "firebase/firestore";
 import { db } from "../firebase";
 import { Plus, X, ShieldAlert, Bot } from 'lucide-react';
 
@@ -92,7 +92,22 @@ const Automations = () => {
             id: doc.id,
             ...doc.data()
           }));
-          setConfigs(fetchedConfigs);
+          
+          // Deduplicate based on title
+          const uniqueConfigs = [];
+          const seenTitles = new Set();
+          for (const config of fetchedConfigs) {
+            if (!seenTitles.has(config.title)) {
+              seenTitles.add(config.title);
+              uniqueConfigs.push(config);
+            } else {
+              // Found a duplicate, remove it from Firebase
+              console.log("Removing duplicate automation:", config.title);
+              await deleteDoc(doc(db, "automations", config.id));
+            }
+          }
+          
+          setConfigs(uniqueConfigs);
         }
         setLoading(false);
       } catch (error) {

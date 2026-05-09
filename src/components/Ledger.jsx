@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { collection, getDocs, addDoc } from "firebase/firestore";
+import { collection, onSnapshot, addDoc } from "firebase/firestore";
 import { db } from "../firebase";
 
 import { 
@@ -54,6 +54,7 @@ export default function Ledger() {
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [pendingPools, setPendingPools] = useState(INITIAL_PENDING_POOLS);
+  const [donors, setDonors] = useState([]);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCategory, setFilterCategory] = useState('All Categories');
@@ -101,31 +102,50 @@ export default function Ledger() {
     }
   };
 
-  const handleAllocateFunds = (e) => {
-    e.preventDefault();
-    // In a real app, this would update Firebase. For now, we update local UI state.
-    setPendingPools(prev => prev.filter(pool => pool.id !== selectedAllocation.id));
-    setSelectedAllocation(null);
-  };
+const handleAllocateFunds = async (e) => {
+  e.preventDefault();
+  setIsSubmitting(true);
+  try {
+    // 1. Create a real transaction entry linked to the donor
+    await addDoc(collection(db, "transactions"), {
+      donor: selectedAllocation.donor,
+      amount: Number(selectedAllocation.amount),
+      category: "Allocated Donation", // You can pull this from a dropdown state
+      type: "Inflow",
+      date: new Date().toLocaleDateString('en-GB'),
+      status: 'Allocated'
+    });
 
-  // FETCH FROM FIREBASE
-  useEffect(() => {
-    const fetchTransactions = async () => {
-      try {
-        const querySnapshot = await getDocs(collection(db, "transactions"));
-        const liveData = querySnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }));
-        setTransactions(liveData);
-        setLoading(false);
-      } catch (error) {
-        console.error("Error fetching transactions: ", error);
-        setLoading(false);
-      }
-    };
-    fetchTransactions();
-  }, []);
+    // 2. Delete the temporary entry from the pending pool
+    await deleteDoc(doc(db, "pendingPools", selectedAllocation.id));
+    
+    setSelectedAllocation(null);
+    setIsSubmitting(false);
+  } catch (err) {
+    console.error("Allocation failed:", err);
+    setIsSubmitting(false);
+  }
+};
+
+useEffect(() => {
+  // 1. Live listener for the main Ledger
+  const unsubTx = onSnapshot(collection(db, "transactions"), (snap) => {
+    setTransactions(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+  });
+
+  // 2. Live listener for the Pending Pool
+  const unsubPools = onSnapshot(collection(db, "pendingPools"), (snap) => {
+    setPendingPools(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+  });
+
+  // 3. Live listener for the Donor CRM (for PAN details)
+  const unsubDonors = onSnapshot(collection(db, "donors"), (snap) => {
+    setDonors(snap.docs.map(d => ({ id: d.id, ...d.data() }))); // Make sure you have [donors, setDonors] = useState([]);
+    setLoading(false);
+  });
+
+  return () => { unsubTx(); unsubPools(); unsubDonors(); };
+}, []);
 
   const filteredTransactions = useMemo(() => {
     return transactions.filter(tx => {
@@ -147,6 +167,12 @@ export default function Ledger() {
       </div>
     );
   }
+
+  const donorInfo = selectedTransaction ? donors.find(d => d.name === selectedTransaction.donor) : null;
+
+  const totalInflow = transactions.filter(t => t.type === 'Inflow').reduce((s, t) => s + Number(t.amount || 0), 0);
+  const totalOutflow = transactions.filter(t => t.type === 'Disbursement').reduce((s, t) => s + Number(t.amount || 0), 0);
+  const totalPending = pendingPools.reduce((s, p) => s + Number(p.amount || 0), 0);
 
   return (
     <div className="font-jost max-w-7xl mx-auto space-y-8 animate-in fade-in duration-500 text-cura-dark dark:text-gray-100 p-8">
@@ -182,9 +208,9 @@ export default function Ledger() {
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <SummaryCard title="Total Inflow (May)" value={145000} change={12.5} />
-        <SummaryCard title="Total Outflow (May)" value={82000} change={-4.2} />
-        <SummaryCard title="Pending Allocations" value={pendingPools.reduce((sum, p) => sum + p.amount, 0)} change={8.1} isPending />
+        <SummaryCard title="Total Inflow (May)" value={totalInflow} change={12.5} />
+        <SummaryCard title="Total Outflow (May)" value={totalOutflow} change={-4.2} />
+        <SummaryCard title="Pending Allocations" value={totalPending} change={8.1} isPending />
         <SummaryCard title="Verifications Required" value={14} change={-2.4} />
       </div>
 
@@ -413,6 +439,14 @@ export default function Ledger() {
                 <div className="flex justify-between">
                   <span className="text-cura-grey dark:text-gray-400 font-semibold">Entity</span>
                   <span className="font-bold dark:text-gray-200">{selectedTransaction.donor}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-cura-grey dark:text-gray-400 font-semibold">PAN Card</span>
+                  <span className="font-mono font-bold dark:text-gray-200">{donorInfo ? donorInfo.pan_number : "PAN not found in CRM"}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-cura-grey dark:text-gray-400 font-semibold">Email</span>
+                  <span className="font-bold dark:text-gray-200">{donorInfo ? donorInfo.email : "N/A"}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-cura-grey dark:text-gray-400 font-semibold">Category</span>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import Sidebar from './components/Sidebar';
 import Dashboard from './components/Dashboard';
@@ -7,6 +7,8 @@ import Ledger from './components/Ledger';
 import ApprovalQueue from './components/ApprovalQueue';
 import Automations from './components/Automations';
 import { ThemeProvider } from './context/ThemeContext';
+import { initializeRobustDatabase } from './seedData';
+
 
 import { db } from './firebase'; 
 import { ref, set, push } from "firebase/database";
@@ -14,6 +16,10 @@ import { ref, set, push } from "firebase/database";
 function App() {
   const location = useLocation();
   const currentPath = location.pathname.replace('/', '') || 'dashboard';
+/*
+  useEffect(() => {
+    initializeRobustDatabase();
+  }, []);*/
 
   const [badges] = useState({
     approvals: 2,
@@ -21,12 +27,7 @@ function App() {
   });
 
   return (
-    // 2. Wrap the entire app in the ThemeProvider
     <ThemeProvider>
-      {/* 3. Added dark mode classes to the main wrapper:
-        - dark:bg-gray-950 for the global background
-        - dark:text-gray-100 for the global default text color 
-      */}
       <div className="flex min-h-screen bg-gray-50 dark:bg-gray-950 font-jost text-cura-dark dark:text-gray-100 transition-colors duration-300">
         
         {/* Sidebar */}

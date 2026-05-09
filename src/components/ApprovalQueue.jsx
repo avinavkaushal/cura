@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { collection, getDocs, addDoc, updateDoc, doc } from "firebase/firestore";
+import { collection, onSnapshot, addDoc, updateDoc, doc } from "firebase/firestore"; // Swapped getDocs for onSnapshot
 import { db } from "../firebase";
 import { 
   CheckSquare, Square, BrainCircuit, 
@@ -112,13 +112,14 @@ const ApprovalQueue = () => {
   const [rejectedHistory, setRejectedHistory] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // AUTO-SEED AND FETCH LOGIC
+  // REAL-TIME AUTO-SEED AND FETCH LOGIC
   useEffect(() => {
-    const fetchQuotes = async () => {
+    let isSeeding = false; // Prevent infinite seed loops
+
+    const unsubscribe = onSnapshot(collection(db, "quotes"), async (snapshot) => {
       try {
-        const querySnapshot = await getDocs(collection(db, "quotes"));
-        
-        if (querySnapshot.empty) {
+        if (snapshot.empty && !isSeeding) {
+          isSeeding = true;
           console.log("No quotes found in Firebase! Auto-seeding database...");
           for (const q of initialPendingQuotes) {
             await addDoc(collection(db, "quotes"), { ...q, status: 'pending' });
@@ -126,43 +127,37 @@ const ApprovalQueue = () => {
           for (const q of initialRejectedHistory) {
             await addDoc(collection(db, "quotes"), { ...q, status: 'rejected' });
           }
-          
-          const newSnapshot = await getDocs(collection(db, "quotes"));
-          parseData(newSnapshot);
+          // The addDoc calls will automatically trigger this onSnapshot again with the new data!
         } else {
-          parseData(querySnapshot);
+          const pending = [];
+          const rejected = [];
+          snapshot.docs.forEach(doc => {
+            const data = { id: doc.id, ...doc.data() };
+            if (data.status === 'pending') pending.push(data);
+            if (data.status === 'rejected') rejected.push(data);
+          });
+          setPendingQuotes(pending);
+          setRejectedHistory(rejected);
+          setLoading(false);
         }
       } catch (error) {
-        console.error("Error fetching quotes: ", error);
+        console.error("Error fetching live quotes: ", error);
         setLoading(false);
       }
-    };
+    });
 
-    const parseData = (snapshot) => {
-      const pending = [];
-      const rejected = [];
-      snapshot.docs.forEach(doc => {
-        const data = { id: doc.id, ...doc.data() };
-        if (data.status === 'pending') pending.push(data);
-        if (data.status === 'rejected') rejected.push(data);
-      });
-      setPendingQuotes(pending);
-      setRejectedHistory(rejected);
-      setLoading(false);
-    };
-
-    fetchQuotes();
+    // Cleanup the listener when the component unmounts
+    return () => unsubscribe();
   }, []);
 
   const toggleSelectAll = () => { setSelectedIds(selectedIds.length === pendingQuotes.length ? [] : pendingQuotes.map(q => q.id)); };
   const toggleSelect = (id) => { setSelectedIds(prev => prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]); };
   
-  // --- NEW ACTIONS ---
+  // --- ACTIONS ---
   const handleApprove = async (id) => {
     try {
       await updateDoc(doc(db, "quotes", id), { status: 'approved' });
-      // Optimistically remove from pending UI
-      setPendingQuotes(prev => prev.filter(q => q.id !== id));
+      // UI updates automatically because of onSnapshot!
       setSelectedIds(prev => prev.filter(selectedId => selectedId !== id));
     } catch (error) {
       console.error("Error approving quote:", error);
@@ -173,13 +168,7 @@ const ApprovalQueue = () => {
     try {
       const rejectedTime = new Date().toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
       await updateDoc(doc(db, "quotes", id), { status: 'rejected', rejectedAt: rejectedTime });
-      
-      // Move to history UI optimistically
-      const rejectedQuote = pendingQuotes.find(q => q.id === id);
-      setPendingQuotes(prev => prev.filter(q => q.id !== id));
-      if (rejectedQuote) {
-        setRejectedHistory(prev => [{ ...rejectedQuote, status: 'rejected', rejectedAt: rejectedTime }, ...prev]);
-      }
+      // UI updates automatically because of onSnapshot!
       setSelectedIds(prev => prev.filter(selectedId => selectedId !== id));
     } catch (error) {
       console.error("Error rejecting quote:", error);
@@ -191,8 +180,6 @@ const ApprovalQueue = () => {
       for (const id of selectedIds) {
         await updateDoc(doc(db, "quotes", id), { status: 'approved' });
       }
-      // Optimistically clear the UI
-      setPendingQuotes(prev => prev.filter(q => !selectedIds.includes(q.id)));
       setSelectedIds([]);
     } catch (error) {
       console.error("Error during bulk approval:", error);
