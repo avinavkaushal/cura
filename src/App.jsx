@@ -8,6 +8,8 @@ import ApprovalQueue from './components/ApprovalQueue';
 import Automations from './components/Automations';
 import { ThemeProvider } from './context/ThemeContext';
 import Auth from './components/Auth';
+import ProtectedRoute from './components/ProtectedRoute';
+import { useAuth } from './context/AuthContext';
 
 
 
@@ -18,8 +20,8 @@ function App() {
   const location = useLocation();
   const currentPath = location.pathname.replace('/', '') || 'dashboard';
   
-  // Fake auth state (we'll connect to Firebase later)
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const { currentUser } = useAuth();
+  const isAuthenticated = !!currentUser;
 
   const [badges] = useState({
     approvals: 2,
@@ -33,7 +35,7 @@ function App() {
         <div className="flex min-h-screen bg-gray-50 dark:bg-gray-950 font-jost text-cura-dark dark:text-gray-100 transition-colors duration-300">
           <div className="flex-1">
             <Routes>
-              <Route path="/auth" element={<Auth onLoginSuccess={() => setIsAuthenticated(true)} />} />
+              <Route path="/auth" element={<Auth />} />
               <Route path="*" element={<Navigate to="/auth" replace />} />
             </Routes>
           </div>

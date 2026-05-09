@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { collection, getDocs, addDoc, updateDoc, doc, deleteDoc } from "firebase/firestore";
+import { collection, addDoc, updateDoc, doc, onSnapshot } from "firebase/firestore";
 import { db } from "../firebase";
 import { Plus, X, ShieldAlert, Bot } from 'lucide-react';
 
@@ -72,50 +72,43 @@ const Automations = () => {
     title: '', agent: 'Custom Agent', description: '', status: 'approval'
   });
 
+  // REAL-TIME LISTENER
   useEffect(() => {
     const unsub = onSnapshot(collection(db, "automations"), async (snapshot) => {
       if (snapshot.empty) {
-          console.log("No automations found. Seeding default rules...");
-          let newConfigs = [];
-          for (const rule of defaultAutomations) {
-            const docRef = await addDoc(collection(db, "automations"), rule);
-            newConfigs.push({ id: docRef.id, ...rule });
-          }
-          setConfigs(newConfigs);
-        } else {
-      setConfigs(snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })));
+        console.log("No automations found. Seeding default rules...");
+        for (const rule of defaultAutomations) {
+          await addDoc(collection(db, "automations"), rule);
+        }
+      } else {
+        const fetchedConfigs = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+        setConfigs(fetchedConfigs);
       }
-    setLoading(false);
-  });
-   return () => unsub();
-}, []);
+      setLoading(false);
+    });
 
-  // Update Firebase on Toggle
+    return () => unsub();
+  }, []);
+
   const handleToggleStatus = async (id, currentStatus) => {
     const newStatus = currentStatus === 'autonomous' ? 'approval' : 'autonomous';
-    
-    // Optimistic UI Update
-    setConfigs(configs.map(c => c.id === id ? { ...c, status: newStatus } : c));
-
     try {
       const docRef = doc(db, "automations", id);
       await updateDoc(docRef, { status: newStatus });
+      // No need to setConfigs here, onSnapshot will pick it up instantly
     } catch (error) {
       console.error("Error updating status:", error);
-      setConfigs(configs.map(c => c.id === id ? { ...c, status: currentStatus } : c));
     }
   };
+
   const handleAddRule = async (e) => {
     e.preventDefault();
     setIsSubmitting(true);
     try {
-      const newRule = { ...formData };
-      const docRef = await addDoc(collection(db, "automations"), newRule);
-      
-      setConfigs([...configs, { id: docRef.id, ...newRule }]);
+      await addDoc(collection(db, "automations"), formData);
       setFormData({ title: '', agent: 'Custom Agent', description: '', status: 'approval' });
       setIsAddModalOpen(false);
       setIsSubmitting(false);
@@ -171,7 +164,6 @@ const Automations = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 dark:bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="bg-white dark:bg-gray-900 w-full max-w-md rounded-[2rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
             
-            {/* Modal Header */}
             <div className="p-6 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center bg-gray-50/50 dark:bg-gray-800/30">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/50 flex items-center justify-center text-cura-blue dark:text-blue-400">
@@ -187,7 +179,6 @@ const Automations = () => {
               </button>
             </div>
 
-            {/* Modal Form */}
             <form onSubmit={handleAddRule} className="p-6 space-y-4">
               <div className="space-y-1">
                 <label className="text-xs font-bold uppercase text-cura-grey dark:text-gray-400">Rule Title</label>

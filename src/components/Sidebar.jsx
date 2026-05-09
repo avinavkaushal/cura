@@ -16,12 +16,27 @@ import {
   Moon   // Added for theme toggle
 } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext'; // Import our new hook
+import { useAuth } from '../context/AuthContext';
+import { auth } from '../firebase';
+import { signOut } from 'firebase/auth';
 
 const Sidebar = ({ activeTab, badges }) => {
   const [expanded, setExpanded] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const profileRef = useRef(null);
   const { theme, toggleTheme } = useTheme(); // Consume the theme context
+  const { currentUser, userData } = useAuth(); // Consume the auth context
+
+  // Helper: Generate initials from name (e.g., "Aarav Sharma" -> "AS")
+  const getInitials = (name) => {
+    if (!name) return 'U'; // Default if name isn't loaded
+    const names = name.split(' ');
+    let initials = names[0].substring(0, 1).toUpperCase();
+    if (names.length > 1) {
+      initials += names[names.length - 1].substring(0, 1).toUpperCase();
+    }
+    return initials;
+  };
 
   // Close profile menu when clicking outside
   useEffect(() => {
@@ -34,6 +49,19 @@ const Sidebar = ({ activeTab, badges }) => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  const handleSignOut = async () => {
+    try {
+      await signOut(auth);
+      window.location.href = '/'; 
+    } catch (e) {
+      console.error("Sign out error:", e);
+    }
+  };
+
+  const handleHelp = () => {
+    window.open('https://github.com/avinavkaushal/cura', '_blank');
+  };
+
   const navItems = [
     { id: 'dashboard', icon: LayoutDashboard, label: 'Dashboard' },
     { id: 'inventory', icon: Package, label: 'Inventory' },
@@ -45,9 +73,9 @@ const Sidebar = ({ activeTab, badges }) => {
   const profileMenuItems = [
     { label: 'Profile', icon: User },
     { label: 'Settings', icon: Settings },
-    { label: 'Help & Support', icon: HelpCircle },
+    { label: 'Help & Support', icon: HelpCircle, action: handleHelp },
     { divider: true },
-    { label: 'Sign Out', icon: LogOut, danger: true },
+    { label: 'Sign Out', icon: LogOut, danger: true, action: handleSignOut },
   ];
 
   return (
@@ -160,12 +188,16 @@ const Sidebar = ({ activeTab, badges }) => {
         >
           <div className="flex items-center gap-3 overflow-hidden">
             <div className="w-9 h-9 flex-shrink-0 rounded-full bg-gradient-to-tr from-cura-blue to-blue-400 text-white flex items-center justify-center font-bold text-sm shadow-sm ring-2 ring-white dark:ring-gray-950">
-              M
+              {userData ? getInitials(userData.name) : 'C'}
             </div>
             {expanded && (
               <div className="text-left overflow-hidden">
-                <p className="font-bold text-sm text-cura-dark dark:text-gray-100 truncate leading-tight">Manager</p>
-                <p className="text-[10px] font-semibold text-cura-grey dark:text-gray-500 truncate">manager@cura.org</p>
+                <p className="font-bold text-sm text-cura-dark dark:text-gray-100 truncate leading-tight">
+                  {userData ? userData.name : 'Loading User...'}
+                </p>
+                <p className="text-[10px] font-semibold text-cura-grey dark:text-gray-500 truncate">
+                  {currentUser ? currentUser.email : 'manager@cura.org'}
+                </p>
               </div>
             )}
           </div>
@@ -178,7 +210,9 @@ const Sidebar = ({ activeTab, badges }) => {
           <div className="absolute bottom-full left-4 mb-2 w-56 bg-white dark:bg-gray-900 rounded-2xl shadow-xl shadow-gray-200/50 dark:shadow-none border border-gray-100 dark:border-gray-800 py-2 z-50 origin-bottom-left animate-in fade-in zoom-in-95 duration-200">
             {/* User Info Header */}
             <div className="px-4 py-3 border-b border-gray-50 dark:border-gray-800 mb-1">
-              <p className="font-bold text-sm text-cura-dark dark:text-gray-100">manager@cura.org</p>
+              <p className="font-bold text-sm text-cura-dark dark:text-gray-100">
+                {currentUser ? currentUser.email : 'manager@cura.org'}
+              </p>
             </div>
 
             {/* Menu Items */}
@@ -189,7 +223,10 @@ const Sidebar = ({ activeTab, badges }) => {
               return (
                 <button
                   key={item.label}
-                  onClick={() => setProfileOpen(false)}
+                  onClick={() => {
+                    setProfileOpen(false);
+                    if (item.action) item.action();
+                  }}
                   className={`w-full text-left px-4 py-2.5 text-sm flex items-center justify-between group transition-colors ${
                     item.danger
                       ? 'text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 font-semibold'
