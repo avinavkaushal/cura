@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { collection, getDocs } from "firebase/firestore";
+import { collection, getDocs, addDoc } from "firebase/firestore";
 import { db } from "../firebase";
 
 import { 
@@ -11,7 +11,7 @@ import {
   ArrowRight, Zap
 } from 'lucide-react';
 
-// --- MOCK DATA FOR OTHER SECTIONS (We will move this to Firebase next!) ---
+// --- MOCK DATA FOR REORDER HISTORY ---
 const reorderHistory = [
   { id: 'PO-209', date: '12 May 2024', item: 'Notebooks (A5)', qty: '200 pcs', vendor: 'Standard Supplies Co.', status: 'Delivered' },
   { id: 'PO-208', date: '08 May 2024', item: 'Milk Powder', qty: '50 kg', vendor: 'Global Wholesale', status: 'Delivered' },
@@ -36,19 +36,72 @@ const InventoryRow = ({ item }) => {
   const stock = item.stock || 0;
   const daysLeft = Math.floor(stock / consumption);
   
-  const triggerSourcing = () => {
+  const triggerSourcing = async () => {
+    // 1. Start UI animation
     setSourcingState('thinking');
     setReasoningStep(0);
-    let step = 0;
-    const interval = setInterval(() => {
-      step += 1;
-      if (step < AI_REASONING_STEPS.length) {
-        setReasoningStep(step);
-      } else {
-        clearInterval(interval);
-        setSourcingState('done');
-      }
+    
+    const uiInterval = setInterval(() => {
+      setReasoningStep((prev) => (prev < AI_REASONING_STEPS.length - 1 ? prev + 1 : prev));
     }, 1500);
+
+    try {
+      console.log(`🚀 Routing ${item.name} to the local AI Swarm...`);
+
+      // 2. THE BRIDGE: Hitting your FastAPI backend
+      const response = await fetch("http://127.0.0.1:8000/trigger-procurement", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          item_name: item.name,
+          current_stock: item.stock,
+          required_stock: item.stock + 30, 
+          vendor_name: "Local Mandi Services",
+          automation_mode: "human" 
+        })
+      });
+
+      const data = await response.json();
+      console.log("🧠 Swarm Response Received:", data);
+
+      // --- THE FIREBASE BRIDGE: Send directly to Approvals Queue ---
+      const currentTime = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+      const requiredQty = 30; // Amount we asked the AI to source
+
+      const newApprovalCard = {
+        quoteId: `Q-${Math.floor(Math.random() * 9000) + 1000}`, 
+        vendor: data.vendor || "Local Mandi Services",
+        item: item.name,
+        quantity: `${requiredQty} ${item.unit}`,
+        price: (item.stock + requiredQty) * 45, // Generating a mock price for the UI based on stock
+        marketAvg: ((item.stock + requiredQty) * 45) + 300, // Fake market avg for the UI
+        score: 95, 
+        reasoning: [
+           data.agent_reasoning || "AI verified safety constraints.",
+           "Price negotiated down based on predictive volume."
+        ],
+        timeline: [
+           { time: currentTime, text: "AI triggered by low stock alert." },
+           { time: currentTime, text: "WhatsApp draft generated and audited." }
+        ],
+        final_message: data.message_to_send,
+        status: 'pending' // Approvals page looks for 'pending' quotes
+      };
+      
+      await addDoc(collection(db, "quotes"), newApprovalCard);
+      console.log("✅ Successfully saved to Firebase Quotes!");
+      // -----------------------------------------------------------
+
+      // 3. Stop the animation and lock in the success UI
+      clearInterval(uiInterval);
+      setReasoningStep(AI_REASONING_STEPS.length - 1);
+      setSourcingState('done');
+      
+    } catch (error) {
+      console.error("❌ API Connection Failed. Is the Uvicorn server running?", error);
+      clearInterval(uiInterval);
+      setSourcingState('idle'); 
+    }
   };
 
   return (
@@ -169,11 +222,11 @@ const InventoryRow = ({ item }) => {
                       {sourcingState === 'done' && (
                         <div className="p-3 bg-white dark:bg-gray-800 rounded-xl border border-emerald-100 dark:border-emerald-900/50 shadow-sm flex justify-between items-center animate-in fade-in zoom-in-95">
                           <div>
-                            <p className="text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mb-0.5">Best Quote Found</p>
-                            <p className="text-sm font-bold dark:text-gray-100">Fresh Mart - ₹42/kg</p>
+                            <p className="text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mb-0.5">Sourcing Complete</p>
+                            <p className="text-sm font-bold dark:text-gray-100">Draft saved to Approvals.</p>
                           </div>
-                          <button className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold rounded-lg transition-colors">
-                            Send to Approvals
+                          <button className="px-4 py-2 bg-emerald-500 text-white text-xs font-bold rounded-lg transition-colors opacity-50 cursor-not-allowed">
+                            Ready
                           </button>
                         </div>
                       )}
@@ -194,11 +247,9 @@ const Inventory = () => {
   const [activeTab, setActiveTab] = useState('All');
   const tabs = ['All', 'Food', 'Medical', 'Education', 'Hygiene'];
 
-  // 1. STATE FOR LIVE DATA (Correctly placed!)
   const [inventoryData, setInventoryData] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // 2. FETCH FROM FIREBASE
   useEffect(() => {
     const fetchInventory = async () => {
       try {
@@ -218,7 +269,6 @@ const Inventory = () => {
     fetchInventory();
   }, []);
 
-  // 3. SHOW LOADING SCREEN WHILE FETCHING
   if (loading) {
     return (
       <div className="w-full min-h-screen p-8 flex items-center justify-center font-jost">
