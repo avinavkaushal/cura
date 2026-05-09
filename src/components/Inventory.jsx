@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { collection, getDocs, addDoc } from "firebase/firestore";
 import { db } from "../firebase";
+import Papa from 'papaparse';
 
 import { 
   AreaChart, Area, ResponsiveContainer, Tooltip, XAxis 
@@ -8,7 +10,7 @@ import {
 import { 
   Search, Filter, ChevronDown, ChevronUp, Bot, 
   TrendingDown, AlertCircle, Clock, History, CheckCircle2, 
-  ArrowRight, Zap
+  ArrowRight, Zap, Plus, X, Upload 
 } from 'lucide-react';
 
 // --- MOCK DATA FOR REORDER HISTORY ---
@@ -247,8 +249,72 @@ const Inventory = () => {
   const [activeTab, setActiveTab] = useState('All');
   const tabs = ['All', 'Food', 'Medical', 'Education', 'Hygiene'];
 
+  // 1. STATE FOR LIVE DATA
   const [inventoryData, setInventoryData] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [formData, setFormData] = useState({
+    name: '', category: 'Food', stock: '', unit: 'kg', consumption: ''
+  });
+  
+  // CSV Upload State & Ref
+  const fileInputRef = useRef(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadStats, setUploadStats] = useState({ total: 0, current: 0 });
+  
+  const handleFileUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    setIsUploading(true);
+
+    Papa.parse(file, {
+      header: true, // Expects the first row of the CSV to have column names
+      skipEmptyLines: true,
+      complete: async (results) => {
+        const rows = results.data;
+        setUploadStats({ total: rows.length, current: 0 });
+        let newItems = [];
+
+        // Loop through CSV rows and push to Firebase
+        for (let i = 0; i < rows.length; i++) {
+          const row = rows[i];
+          try {
+            const newItem = {
+              name: row.name || 'Unnamed Item',
+              category: row.category || 'Other',
+              stock: Number(row.stock) || 0,
+              unit: row.unit || 'units',
+              consumption: Number(row.consumption) || 1,
+              status: 'healthy',
+              trend: []
+            };
+
+            const docRef = await addDoc(collection(db, "inventory"), newItem);
+            newItems.push({ id: docRef.id, ...newItem });
+            
+            // Update progress state
+            setUploadStats(prev => ({ ...prev, current: i + 1 }));
+          } catch (err) {
+            console.error("Error uploading row:", err);
+          }
+        }
+
+        // Add all new items to the UI table instantly
+        setInventoryData(prev => [...newItems, ...prev]);
+        setIsUploading(false);
+        
+        // Reset the file input so you can upload the same file again if needed
+        if(fileInputRef.current) fileInputRef.current.value = '';
+      },
+      error: (error) => {
+        console.error("Error parsing CSV:", error);
+        setIsUploading(false);
+        alert("Failed to parse CSV file.");
+      }
+    });
+  };
 
   useEffect(() => {
     const fetchInventory = async () => {
@@ -269,6 +335,37 @@ const Inventory = () => {
     fetchInventory();
   }, []);
 
+  const handleAddItem = async (e) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    try {
+      const newItem = {
+        name: formData.name,
+        category: formData.category,
+        stock: Number(formData.stock),
+        unit: formData.unit,
+        consumption: Number(formData.consumption),
+        status: 'healthy', 
+        trend: [] 
+      };
+
+      // Push to Firebase
+      const docRef = await addDoc(collection(db, "inventory"), newItem);
+      
+      // Update table instantly without refresh
+      setInventoryData([...inventoryData, { id: docRef.id, ...newItem }]);
+      
+      // Clean up
+      setFormData({ name: '', category: 'Food', stock: '', unit: 'kg', consumption: '' });
+      setIsAddModalOpen(false);
+      setIsSubmitting(false);
+    } catch (error) {
+      console.error("Error adding item:", error);
+      setIsSubmitting(false);
+    }
+  };
+
+  // 3. SHOW LOADING SCREEN WHILE FETCHING
   if (loading) {
     return (
       <div className="w-full min-h-screen p-8 flex items-center justify-center font-jost">
@@ -301,6 +398,28 @@ const Inventory = () => {
           </div>
           <button className="p-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl text-cura-dark dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
             <Filter size={18} />
+          </button>
+          {/* CSV Upload Hidden Input & Button */}
+          <input 
+            type="file" 
+            accept=".csv" 
+            ref={fileInputRef} 
+            onChange={handleFileUpload} 
+            className="hidden" 
+          />
+          <button 
+            onClick={() => fileInputRef.current.click()}
+            className="flex items-center gap-2 px-5 py-2.5 text-sm font-bold text-cura-dark dark:text-gray-200 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-all shadow-sm"
+          >
+            <Upload size={18} /> Upload CSV
+          </button>
+
+          {/* Add Resource Button */}
+          <button 
+            onClick={() => setIsAddModalOpen(true)}
+            className="flex items-center gap-2 px-5 py-2.5 text-sm font-bold text-white bg-cura-dark dark:bg-cura-blue rounded-xl hover:bg-black dark:hover:bg-blue-600 transition-all shadow-md"
+          >
+            <Plus size={18} /> Add Resource
           </button>
         </div>
       </div>
@@ -372,6 +491,74 @@ const Inventory = () => {
           ))}
         </div>
       </div>
+      {/* ADD ITEM MODAL */}
+      {isAddModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 dark:bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-gray-900 w-full max-w-md rounded-[2rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+            
+            {/* Modal Header */}
+            <div className="p-6 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center bg-gray-50/50 dark:bg-gray-800/30">
+              <div>
+                <h3 className="font-bold text-lg text-cura-dark dark:text-gray-100">Add New Resource</h3>
+                <p className="text-xs text-cura-grey dark:text-gray-400 font-medium">Log a new item into your Firebase inventory.</p>
+              </div>
+              <button onClick={() => setIsAddModalOpen(false)} className="p-2 text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors">
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Modal Form */}
+            <form onSubmit={handleAddItem} className="p-6 space-y-4">
+              <div className="space-y-1">
+                <label className="text-xs font-bold uppercase text-cura-grey dark:text-gray-400">Item Name</label>
+                <input required type="text" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-cura-dark dark:text-gray-200 text-sm font-bold rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-cura-blue/30" placeholder="e.g., Apple Juice" />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-bold uppercase text-cura-grey dark:text-gray-400">Category</label>
+                <select value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})} className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-cura-dark dark:text-gray-200 text-sm font-bold rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-cura-blue/30">
+                  <option>Food</option>
+                  <option>Medical</option>
+                  <option>Education</option>
+                  <option>Hygiene</option>
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold uppercase text-cura-grey dark:text-gray-400">Initial Stock</label>
+                  <input required type="number" value={formData.stock} onChange={e => setFormData({...formData, stock: e.target.value})} className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-cura-dark dark:text-gray-200 text-sm font-bold rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-cura-blue/30" placeholder="e.g., 50" />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-bold uppercase text-cura-grey dark:text-gray-400">Unit Type</label>
+                  <input required type="text" value={formData.unit} onChange={e => setFormData({...formData, unit: e.target.value})} className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-cura-dark dark:text-gray-200 text-sm font-bold rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-cura-blue/30" placeholder="kg, boxes, L..." />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-bold uppercase text-cura-grey dark:text-gray-400">Est. Daily Consumption</label>
+                <input required type="number" value={formData.consumption} onChange={e => setFormData({...formData, consumption: e.target.value})} className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-cura-dark dark:text-gray-200 text-sm font-bold rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-cura-blue/30" placeholder="e.g., 2" />
+              </div>
+
+              <button type="submit" disabled={isSubmitting} className="w-full mt-4 py-3.5 bg-cura-dark dark:bg-cura-blue text-white font-bold rounded-xl hover:bg-black dark:hover:bg-blue-600 transition-colors shadow-lg disabled:opacity-50">
+                {isSubmitting ? 'Saving to Database...' : 'Save Resource'}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+{/* CSV UPLOADING OVERLAY */}
+      {isUploading && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-white/80 dark:bg-gray-950/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="flex flex-col items-center gap-4">
+            <div className="w-16 h-16 border-4 border-cura-blue/20 border-t-cura-blue rounded-full animate-spin"></div>
+            <h3 className="text-xl font-bold text-cura-dark dark:text-gray-100">Processing CSV...</h3>
+            <p className="text-sm font-bold text-cura-grey dark:text-gray-400 bg-white dark:bg-gray-900 px-4 py-2 rounded-full shadow-sm border border-gray-100 dark:border-gray-800">
+              Uploaded {uploadStats.current} of {uploadStats.total} items
+            </p>
+          </div>
+        </div>
+      )}
 
     </div>
   );
